@@ -1,0 +1,50 @@
+{
+  "name": "erp-finance",
+  "version": "1.0.0",
+  "description": "ERP Finance financial operations webapp",
+  "scripts": {
+    "dev": "concurrently -k -n api,vite -c cyan,green \"node server/primavera-api.mjs\" \"vite --host 127.0.0.1\"",
+    "dev:api": "node server/primavera-api.mjs",
+    "dev:vite": "vite --host 127.0.0.1",
+    "seed:demo": "node server/db/build-demo-db.mjs",
+    "build": "tsc -b && vite build",
+    "build:static": "tsc -b && vite build --mode static && node server/db/generate-static-snapshots.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --pretty"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "dependencies": {
+    "@radix-ui/react-accordion": "^1.2.12",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-label": "^2.1.8",
+    "@radix-ui/react-navigation-menu": "^1.2.14",
+    "@radix-ui/react-slot": "^1.2.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.17.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tailwind-merge": "^3.6.0",
+    "tw-animate-css": "^1.4.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@tailwindcss/vite": "^4.3.0",
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.2.16",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "^10.0.3",
+    "playwright": "^1.60.0",
+    "puppeteer": "^25.1.0",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
+  }
+}
