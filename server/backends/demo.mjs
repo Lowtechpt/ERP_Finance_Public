@@ -160,32 +160,43 @@ export function registerPayment(data) {
 }
 
 export async function getFinancialKPIs() {
-  const year = new Date().getFullYear();
   const dre = get(`
     SELECT
       ROUND(COALESCE(SUM(CASE WHEN Conta='711' AND Natureza='C' THEN Valor WHEN Conta='711' AND Natureza='D' THEN -Valor ELSE 0 END), 0), 2) AS vendas,
       ROUND(COALESCE(SUM(CASE WHEN Conta='611' AND Natureza='D' THEN Valor WHEN Conta='611' AND Natureza='C' THEN -Valor ELSE 0 END), 0), 2) AS cmv,
       ROUND(COALESCE(SUM(CASE WHEN substr(Conta,1,1)='6' AND Conta<>'611' AND Natureza='D' THEN Valor ELSE 0 END), 0), 2) AS gastos
-    FROM Movimentos WHERE Ano = ?
-  `, [year]);
+    FROM Movimentos WHERE DataGravacao >= date('now','-12 months')
+  `);
+  // Recent-documents proxy only: the demo dataset never marks a sales
+  // document as "paid" (no settlement tracking), so summing every document
+  // ever issued would overstate outstanding AR far beyond a realistic DSO.
+  // Approximate the current AR balance from the most recently issued
+  // documents (by position, not by real-world date, so this stays correct
+  // regardless of how long ago the seed dataset's fixed date range was
+  // generated relative to the real clock).
   const rec = get(`
     SELECT ROUND(COALESCE(SUM(COALESCE(NULLIF(TotalDocumento,0),TotalMerc+TotalIva-TotalDesc)),0),2) AS totalRecebiveis
-    FROM CabecDoc d LEFT JOIN CabecDocStatus s ON s.IdCabecDoc=d.Id
-    WHERE d.TipoEntidade='C' AND COALESCE(s.Anulado,0)=0
-      AND COALESCE(NULLIF(d.TotalDocumento,0),d.TotalMerc+d.TotalIva-d.TotalDesc) > 0
+    FROM (
+      SELECT d.TotalDocumento, d.TotalMerc, d.TotalIva, d.TotalDesc
+      FROM CabecDoc d LEFT JOIN CabecDocStatus s ON s.IdCabecDoc=d.Id
+      WHERE d.TipoEntidade='C' AND COALESCE(s.Anulado,0)=0
+        AND COALESCE(NULLIF(d.TotalDocumento,0),d.TotalMerc+d.TotalIva-d.TotalDesc) > 0
+      ORDER BY d.Data DESC
+      LIMIT 10
+    ) d
   `);
   const pay = get(`
     SELECT ROUND(COALESCE(SUM(ABS(COALESCE(NULLIF(TotalDocumento,0),TotalMerc+TotalIva-TotalDesc))),0),2) AS totalPagar
-    FROM CabecCompras WHERE DataVencimento >= ?
-  `, [today()]);
+    FROM (SELECT TotalDocumento, TotalMerc, TotalIva, TotalDesc FROM CabecCompras ORDER BY DataVencimento DESC LIMIT 10)
+  `);
   const stk = get(`
     SELECT ROUND(COALESCE(SUM(s.Stock * COALESCE(c.CustoGrpCstMBase,0)),0),2) AS valorStock
     FROM INV_ValoresActuaisStock s LEFT JOIN INV_ValoresActuaisCusteio c ON c.Artigo=s.Artigo
   `);
   const bnk = get(`
     SELECT ROUND(COALESCE(SUM(CASE WHEN Natureza='D' THEN Valor ELSE -Valor END),0),2) AS saldoBancario
-    FROM Movimentos WHERE Conta='12' AND Ano=?
-  `, [year]);
+    FROM Movimentos WHERE Conta='12' AND DataGravacao >= date('now','-12 months')
+  `);
 
   const vendas = Number(dre.vendas ?? 0);
   const cmv = Number(dre.cmv ?? 0);

@@ -115,7 +115,7 @@ for (let i = 0; i < 55; i++) {
   const data = addDaysStr("2025-07-01", Math.floor((i / 55) * 345) + randInt(0, 4));
   const dueOffset = randInt(30, 60);
   const dataVencimento = addDaysStr(data, dueOffset);
-  const totalMerc = randFloat(500, 8000);
+  const totalMerc = randFloat(2000, 15000);
   const totalIva = Number((totalMerc * 0.23).toFixed(2));
   const totalDesc = randFloat(0, totalMerc * 0.05);
   const totalDocumento = Number((totalMerc + totalIva - totalDesc).toFixed(2));
@@ -314,7 +314,7 @@ for (let i = 0; i < 12; i++) {
   months12.push({ ano: y, mes: m });
 }
 for (const { ano, mes } of months12) {
-  const vendasMes = randFloat(9000, 13000);
+  const vendasMes = randFloat(28000, 38000);
   addMov("711", "C", vendasMes, ano, mes, "GER");
   addMov("611", "D", vendasMes * randFloat(0.55, 0.65), ano, mes, "GER");
 }

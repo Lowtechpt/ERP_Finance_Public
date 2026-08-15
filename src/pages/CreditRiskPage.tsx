@@ -1,12 +1,17 @@
 ﻿import { useState, useEffect } from "react";
 import { ShieldAlert } from "lucide-react";
-import { apiUrl } from "@/lib/api";
+import { apiUrl, isStatic } from "@/lib/api";
 
 export default function CreditRiskPage() {
   const [risk, setRisk] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (isStatic) {
+      setRisk("Chat IA só está disponível a correr localmente (npm run dev) com GEMINI_API_KEY configurada — ver README.");
+      setLoading(false);
+      return;
+    }
     fetch(apiUrl("/api/ai/chat"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "Identifica clientes com risco de crédito elevado baseado no histórico de pagamentos", history: [] }) })
       .then(r => r.json())
       .then(d => setRisk(d.reply || "Sem resposta"))

@@ -10,10 +10,12 @@
     "build": "tsc -b && vite build",
     "build:static": "tsc -b && vite build --mode static && node server/db/generate-static-snapshots.mjs",
     "preview": "vite preview",
-    "typecheck": "tsc -b --pretty"
+    "typecheck": "tsc -b --pretty",
+    "test": "node --test server/backends/demo.test.mjs",
+    "test:e2e": "playwright test"
   },
   "keywords": [],
-  "author": "",
+  "author": "Luis Baptista",
   "license": "MIT",
   "type": "module",
   "engines": {

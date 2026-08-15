@@ -6,6 +6,12 @@ A financial operations dashboard for industrial companies, built on top of the *
 
 The demo runs entirely on synthetic data generated from a small SQLite database committed to this repo — no backend, no database server, nothing to configure. Click the link above and it just works.
 
+<p align="center">
+  <img src="docs/dashboard.png" width="32%" alt="Dashboard executivo" />
+  <img src="docs/receivables.png" width="32%" alt="Contas a receber" />
+  <img src="docs/hr.png" width="32%" alt="Recursos humanos" />
+</p>
+
 ## Why this project exists
 
 ERP Finance started as a real integration against a live PRIMAVERA Evolution / SQL Server instance, reading receivables, payables, production orders, HR payroll and general-ledger data through `sqlcmd`. That version only runs on Windows, next to a licensed PRIMAVERA install, on `localhost` — not something you can hand someone as a link.

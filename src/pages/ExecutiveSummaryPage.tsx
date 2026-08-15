@@ -1,12 +1,17 @@
 ﻿import { useState, useEffect } from "react";
 import { Sparkles } from "lucide-react";
-import { apiUrl } from "@/lib/api";
+import { apiUrl, isStatic } from "@/lib/api";
 
 export default function ExecutiveSummaryPage() {
   const [summary, setSummary] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (isStatic) {
+      setSummary("Chat IA só está disponível a correr localmente (npm run dev) com GEMINI_API_KEY configurada — ver README.");
+      setLoading(false);
+      return;
+    }
     fetch(apiUrl("/api/ai/chat"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "Faz um sumário executivo do estado financeiro atual", history: [] }) })
       .then(r => r.json())
       .then(d => setSummary(d.reply || "Sem resposta"))

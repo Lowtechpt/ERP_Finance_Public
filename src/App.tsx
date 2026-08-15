@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useEffect,
   useMemo,
   useRef,
@@ -59,26 +61,26 @@ import {
 } from "@/components/ui/navigation-menu";
 import { Sheet, SheetClose, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { apiUrl } from "@/lib/api";
-import BanksPage from "@/pages/BanksPage";
-import CashFlowPage from "@/pages/CashFlowPage";
-import DashboardPage from "@/pages/DashboardPage";
-import PayablesPage from "@/pages/PayablesPage";
-import DREPage from "@/pages/DREPage";
-import LiquidityPage from "@/pages/LiquidityPage";
-import ProductionPage from "@/pages/ProductionPage";
-import ProfitabilityPage from "@/pages/ProfitabilityPage";
-import BreakEvenPage from "@/pages/BreakEvenPage";
-import ComparePeriodsPage from "@/pages/ComparePeriodsPage";
-import BudgetVsActualPage from "@/pages/BudgetVsActualPage";
-import CollectionsCommsPage from "@/pages/CollectionsCommsPage";
-import ExecutiveSummaryPage from "@/pages/ExecutiveSummaryPage";
-import RootCauseAnalysisPage from "@/pages/RootCauseAnalysisPage";
-import CreditRiskPage from "@/pages/CreditRiskPage";
-import AlertsPage from "@/pages/AlertsPage";
-import AlertThresholdsPage from "@/pages/AlertThresholdsPage";
-import HRPage from "@/pages/HRPage";
-import CostAllocationPage from "@/pages/CostAllocationPage";
+import { apiUrl, isStatic } from "@/lib/api";
+const BanksPage = lazy(() => import("@/pages/BanksPage"));
+const CashFlowPage = lazy(() => import("@/pages/CashFlowPage"));
+const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
+const PayablesPage = lazy(() => import("@/pages/PayablesPage"));
+const DREPage = lazy(() => import("@/pages/DREPage"));
+const LiquidityPage = lazy(() => import("@/pages/LiquidityPage"));
+const ProductionPage = lazy(() => import("@/pages/ProductionPage"));
+const ProfitabilityPage = lazy(() => import("@/pages/ProfitabilityPage"));
+const BreakEvenPage = lazy(() => import("@/pages/BreakEvenPage"));
+const ComparePeriodsPage = lazy(() => import("@/pages/ComparePeriodsPage"));
+const BudgetVsActualPage = lazy(() => import("@/pages/BudgetVsActualPage"));
+const CollectionsCommsPage = lazy(() => import("@/pages/CollectionsCommsPage"));
+const ExecutiveSummaryPage = lazy(() => import("@/pages/ExecutiveSummaryPage"));
+const RootCauseAnalysisPage = lazy(() => import("@/pages/RootCauseAnalysisPage"));
+const CreditRiskPage = lazy(() => import("@/pages/CreditRiskPage"));
+const AlertsPage = lazy(() => import("@/pages/AlertsPage"));
+const AlertThresholdsPage = lazy(() => import("@/pages/AlertThresholdsPage"));
+const HRPage = lazy(() => import("@/pages/HRPage"));
+const CostAllocationPage = lazy(() => import("@/pages/CostAllocationPage"));
 
 const executiveLinks: NavItemType[] = [
   {
@@ -1096,6 +1098,7 @@ export function App() {
       </header>
 
       <main className="grid min-h-[calc(100vh-68px)] grid-cols-1">
+       <Suspense fallback={<div className="p-10 text-sm text-muted-foreground">A carregar…</div>}>
         <section className="min-w-0 border-r border-border">
           <div className="px-3 py-3">
             <div className={cn("mb-3 grid gap-3", isAiRoute ? "lg:grid-cols-1" : "lg:grid-cols-[300px_1fr]")}>
@@ -1461,6 +1464,11 @@ export function App() {
           {activeTab === "Linha a linha" && (
             <div className="mb-5">
               {docLines.length === 0 ? (
+                isStatic ? (
+                  <p className="text-xs text-muted-foreground">
+                    Detalhe por linha não disponível na demo estática (só em <code>npm run dev</code>).
+                  </p>
+                ) : (
                 <Button variant="outline" size="sm" disabled={docLinesLoading}
                   onClick={() => {
                     setDocLinesLoading(true);
@@ -1473,6 +1481,7 @@ export function App() {
                 >
                   {docLinesLoading ? "A carregar..." : "Carregar linhas do documento"}
                 </Button>
+                )
               ) : (
                 <div className="overflow-x-auto rounded-lg border border-border text-xs">
                   <table className="w-full">
@@ -1562,8 +1571,17 @@ export function App() {
                 variant="outline"
                 className="w-full"
                 onClick={() => {
+                  if (isStatic) {
+                    notify("Abrir no ERP só está disponível a correr localmente em modo sqlserver.");
+                    return;
+                  }
                   fetch(apiUrl("/api/open-erp"))
-                    .then(() => notify(`PRIMAVERA ERP a abrir — navegue para ${selectedRow[2]}.`))
+                    .then((r) => r.json())
+                    .then((d: { launched?: boolean; error?: string }) => {
+                      notify(d.launched
+                        ? `PRIMAVERA ERP a abrir — navegue para ${selectedRow[2]}.`
+                        : d.error ?? "Não foi possível abrir o PRIMAVERA.");
+                    })
                     .catch(() => notify("Não foi possível abrir o PRIMAVERA."));
                 }}
               >
@@ -1599,6 +1617,11 @@ export function App() {
                 <div className="flex gap-2">
                   <Button size="sm" className="flex-1"
                     onClick={() => {
+                      if (isStatic) {
+                        notify(`Pagamento de ${paymentAmount}€ registado para ${selectedRow[2]}. (demo estática — não persistido)`);
+                        setShowPaymentForm(false);
+                        return;
+                      }
                       fetch(apiUrl("/api/register-payment"), {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -1615,6 +1638,7 @@ export function App() {
           )}
         </aside>
         )}
+       </Suspense>
       </main>
       {toast && (
         <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-md border border-border bg-background px-4 py-3 text-sm font-medium shadow-xl">
@@ -3027,6 +3051,12 @@ export function ChatPanel({
     setInput("");
     setLoading(true);
     setError(null);
+
+    if (isStatic) {
+      setError("Chat IA só está disponível a correr localmente (npm run dev) com GEMINI_API_KEY configurada — ver README.");
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch(apiUrl("/api/ai/chat"), {
