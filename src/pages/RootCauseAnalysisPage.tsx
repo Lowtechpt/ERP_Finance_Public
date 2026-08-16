@@ -1,6 +1,7 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Lightbulb } from "lucide-react";
 import { apiUrl, isStatic } from "@/lib/api";
+import { PageWrapper, SectionHeader, KPIGrid, PageLoadingState } from "@/components";
 
 export default function RootCauseAnalysisPage() {
   const [analysis, setAnalysis] = useState("");
@@ -19,19 +20,41 @@ export default function RootCauseAnalysisPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  if (loading) {
+    return <PageLoadingState message="Analisando causas..." />;
+  }
+
+  const kpiItems = [
+    { label: "Método", value: "IA Gemini", tone: "default" as const },
+    { label: "Foco", value: "Margens e custos", tone: "default" as const },
+    { label: "Atualização", value: "Sob pedido", tone: "warning" as const },
+    { label: "Estado", value: "Pronto", tone: "success" as const },
+    { label: "Abrangência", value: "Desvios globais", tone: "default" as const },
+  ];
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold flex items-center gap-2">
-        <Lightbulb className="w-6 h-6 text-blue-500" />
-        Análise de Causas Raiz
-      </h1>
-      {loading ? (
-        <div className="text-center py-12">Analisando causas...</div>
-      ) : (
-        <div className="bg-white p-6 rounded shadow">
-          <p className="whitespace-pre-wrap text-sm">{analysis}</p>
+    <PageWrapper>
+      <div className="w-full space-y-8">
+        <SectionHeader
+          category="Diagnóstico"
+          title="Análise de Causas Raiz"
+          description="Causas raiz dos desvios negativos em margens e custos, com recomendações de ação"
+        />
+
+        <KPIGrid items={kpiItems} />
+
+        <div className="bg-background rounded-xl shadow-sm border border-border overflow-hidden">
+          <div className="border-b border-border px-8 py-3">
+            <div className="flex items-center gap-2">
+              <Lightbulb className="h-5 w-5 text-info" />
+              <h2 className="text-sm font-semibold text-muted-foreground tracking-wider">Análise</h2>
+            </div>
+          </div>
+          <div className="p-8">
+            <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{analysis}</p>
+          </div>
         </div>
-      )}
-    </div>
+      </div>
+    </PageWrapper>
   );
 }

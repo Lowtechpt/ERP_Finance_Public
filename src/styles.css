@@ -3,26 +3,40 @@
 
 @theme inline {
   --color-background: #ffffff;
-  --color-foreground: #172033;
-  --color-page: #f6f7f8;
-  --color-muted: #eef1f4;
-  --color-muted-foreground: #667085;
-  --color-border: #dfe4ea;
-  --color-input: #d8dee7;
-  --color-ring: #0f766e;
-  --color-primary: #0f766e;
-  --color-primary-dark: #0b4f49;
+  --color-foreground: #0e1420;
+  --color-page: #f7f8fa;
+  --color-muted: #f1f3f6;
+  --color-muted-foreground: #6b7385;
+  --color-border: #e6e9ee;
+  --color-input: #dbdfe6;
+  --color-ring: #0d9488;
+  --color-primary: #0d9488;
+  --color-primary-dark: #0f5d54;
+  --color-primary-soft: #ecfaf7;
   --color-primary-foreground: #ffffff;
-  --color-secondary: #f3f5f7;
-  --color-secondary-foreground: #263244;
-  --color-danger: #dc2626;
-  --color-danger-soft: #fee2e2;
-  --color-warning: #b45309;
-  --color-warning-soft: #fef3c7;
-  --color-success: #047857;
-  --color-success-soft: #d1fae5;
-  --color-info: #1d4ed8;
-  --color-info-soft: #dbeafe;
+  --color-secondary: #f4f5f7;
+  --color-secondary-foreground: #232a38;
+  --color-danger: #c0342a;
+  --color-danger-soft: #fbeeec;
+  --color-warning: #a15a05;
+  --color-warning-soft: #fbf2e3;
+  --color-success: #12795a;
+  --color-success-soft: #e9f6f0;
+  --color-info: #2454b0;
+  --color-info-soft: #edf2fb;
+  /* Sidebar owns a darker scale than the content area so the shell reads as
+     chrome rather than as another panel. */
+  --color-sidebar: #fbfcfd;
+  --color-sidebar-accent: #eceff4;
+  --color-sidebar-foreground: #0e1420;
+  /* Three steps, not two: section labels recede, items sit mid, the active
+     item is brightest. Labels and items sharing one colour made the tree read
+     as a flat list. */
+  --color-sidebar-section: #9aa3b2;
+  --color-sidebar-muted: #4e5768;
+  --color-sidebar-border: #e4e8ee;
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 8px rgba(16, 24, 40, 0.04);
+  --shadow-card-hover: 0 2px 4px rgba(16, 24, 40, 0.06), 0 8px 20px rgba(16, 24, 40, 0.07);
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
 }
@@ -50,11 +64,17 @@
 }
 
 html {
+  /* 15px root instead of the browser default 16px. Tailwind sizes and spacing
+     are rem-based, so this tightens the whole app by ~6% in one place — this is
+     a dense financial tool, not a marketing page. */
+  font-size: 15px;
   background: var(--color-page);
   color: var(--color-foreground);
   font-family:
-    Aptos, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Inter var", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 body {
@@ -74,3 +94,82 @@ button {
 table {
   font-variant-numeric: tabular-nums;
 }
+
+h1, h2, h3 {
+  letter-spacing: -0.01em;
+}
+
+/* Elevated card: hairline border plus a very soft shadow. The border is drawn
+   with an inset ring rather than a real border so cards never shift by a pixel
+   when the hover state changes. */
+.card-elevated {
+  background: var(--color-background);
+  border-radius: 0.625rem;
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
+  transition: box-shadow 150ms ease;
+}
+
+.card-elevated:hover {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-border) 55%, var(--color-foreground) 12%),
+    var(--shadow-card-hover);
+}
+
+/* Fluid grid from the vault layout rule: columns are created to fit the
+   viewport instead of being pinned to a fixed count. */
+.grid-fluid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+/* Tinted callout: replaces the flat pastel-50 + thick left-border alert pattern
+   with a subtle tint, thin accent bar and rounded corners. */
+.callout {
+  display: flex;
+  gap: 0.625rem;
+  align-items: flex-start;
+  border-radius: 0.625rem;
+  padding: 0.75rem 0.9rem;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  border: 1px solid transparent;
+}
+
+.callout::before {
+  content: "";
+  width: 3px;
+  align-self: stretch;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.callout-danger {
+  background: var(--color-danger-soft);
+  color: color-mix(in srgb, var(--color-danger) 88%, black 6%);
+  border-color: color-mix(in srgb, var(--color-danger) 14%, transparent);
+}
+.callout-danger::before { background: var(--color-danger); }
+
+.callout-warning {
+  background: var(--color-warning-soft);
+  color: color-mix(in srgb, var(--color-warning) 88%, black 6%);
+  border-color: color-mix(in srgb, var(--color-warning) 14%, transparent);
+}
+.callout-warning::before { background: var(--color-warning); }
+
+.callout-info {
+  background: var(--color-info-soft);
+  color: color-mix(in srgb, var(--color-info) 88%, black 6%);
+  border-color: color-mix(in srgb, var(--color-info) 14%, transparent);
+}
+.callout-info::before { background: var(--color-info); }
+
+.callout-success {
+  background: var(--color-success-soft);
+  color: color-mix(in srgb, var(--color-success) 88%, black 6%);
+  border-color: color-mix(in srgb, var(--color-success) 14%, transparent);
+}
+.callout-success::before { background: var(--color-success); }

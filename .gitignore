@@ -11,3 +11,48 @@ graphify-out/graph.json
 playwright-report/
 test-results/
 tests/screenshots/
+coverage/
+
+# Compiled backend output (source of truth is server/**/*.ts)
+dist-server/
+
+# Archived dead code / scratch files (not part of the build)
+_archive/
+
+# ---------------------------------------------------------------------------
+# Internal working files. This repository is public, so the curation that used
+# to live in a separate private repo is done here instead: everything below
+# stays on disk but never gets published.
+# ---------------------------------------------------------------------------
+
+# Working notes and session memory
+SESSION_LOG.md
+PROJECT_CONTEXT.md
+RESEARCH_LOG.md
+research_error.log
+BACKLOG.md
+RH_ROADMAP.md
+CEGID_PRIMAVERA_ACCESS.md
+DESIGN_SYSTEM_GUIDE.md
+PERFORMANCE.md
+SECURITY_HARDENING.md
+Ideia/
+
+# Code-graph analysis output
+graphify-out/
+
+# Local scratch scripts and one-off probes
+debug-*.mjs
+debug-*.ts
+test-sql*.mjs
+test-sql*.ts
+test-endpoints.*
+navigate-cfo.*
+validate-*.sh
+scripts/
+
+# Database seeds containing HR/payroll rows (server/db/schema.sql is kept:
+# the demo database cannot be built without it)
+server/hr-setup.sql
+server/seed-hr-complete.sql
+server/seed-pridemo.sql

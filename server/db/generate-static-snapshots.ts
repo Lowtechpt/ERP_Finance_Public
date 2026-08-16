@@ -1,23 +1,23 @@
 // Pre-computes one JSON file per read-only demo endpoint into dist/api/*.json,
 // so the GitHub Pages build can serve them as static files (no backend at runtime).
-// Mirrors the response shapes built by server/primavera-api.mjs's router for demo mode.
+// Mirrors the response shapes built by server/primavera-api.ts's router for demo mode.
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import * as backend from "../backends/demo.mjs";
+import * as backend from "../backends/demo.js";
 
 const OUT_DIR = path.resolve(process.cwd(), "dist", "api");
 mkdirSync(OUT_DIR, { recursive: true });
 mkdirSync(path.join(OUT_DIR, "profitability"), { recursive: true });
 mkdirSync(path.join(OUT_DIR, "hr"), { recursive: true });
 
-function write(name, data) {
+function write(name: string, data: unknown): void {
   writeFileSync(path.join(OUT_DIR, `${name}.json`), JSON.stringify(data));
   console.log(`api/${name}.json`);
 }
 
-const now = () => new Date().toISOString();
+const now = (): string => new Date().toISOString();
 
-async function main() {
+async function main(): Promise<void> {
   write("health", { ok: true, mode: "demo", ...backend.meta });
 
   write("receivables", { ...backend.meta, generatedAt: now(), receivables: await backend.getReceivables() });

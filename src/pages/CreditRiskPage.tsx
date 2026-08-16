@@ -1,6 +1,7 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { ShieldAlert } from "lucide-react";
 import { apiUrl, isStatic } from "@/lib/api";
+import { PageWrapper, SectionHeader, KPIGrid, PageLoadingState } from "@/components";
 
 export default function CreditRiskPage() {
   const [risk, setRisk] = useState("");
@@ -19,19 +20,41 @@ export default function CreditRiskPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const kpiItems = [
+    { label: "Método", value: "IA Gemini", tone: "default" as const },
+    { label: "Fonte", value: isStatic ? "Estática" : "Histórico pagamentos", tone: "default" as const },
+    { label: "Atualização", value: "Sob pedido", tone: "warning" as const },
+    { label: "Estado", value: "Pronto", tone: "success" as const },
+    { label: "Abrangência", value: "Clientes", tone: "default" as const },
+  ];
+
+  if (loading) {
+    return <PageLoadingState message="Analisando risco..." />;
+  }
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold flex items-center gap-2">
-        <ShieldAlert className="w-6 h-6 text-red-500" />
-        Risco de Crédito
-      </h1>
-      {loading ? (
-        <div className="text-center py-12">Analisando risco...</div>
-      ) : (
-        <div className="bg-white p-6 rounded shadow">
-          <p className="whitespace-pre-wrap text-sm">{risk}</p>
+    <PageWrapper>
+      <div className="space-y-8">
+        <KPIGrid items={kpiItems} />
+
+        <SectionHeader
+          category="Risco e Crédito"
+          title="Risco de Crédito"
+          description="Identificação de clientes com risco de crédito elevado baseado no histórico de pagamentos"
+        />
+
+        <div className="bg-background rounded-xl shadow-sm border border-border overflow-hidden">
+          <div className="border-b border-border px-8 py-3">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5 text-danger" />
+              <h2 className="text-sm font-semibold text-muted-foreground tracking-wider">Análise de risco</h2>
+            </div>
+          </div>
+          <div className="p-8">
+            <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{risk}</p>
+          </div>
         </div>
-      )}
-    </div>
+      </div>
+    </PageWrapper>
   );
 }

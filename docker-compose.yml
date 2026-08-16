@@ -1,0 +1,47 @@
+# Runs the ERP Finance demo: API + built frontend on http://localhost:5000
+#
+#   docker compose up --build
+#
+# The SQLite demo database is baked into the image at build time, so there is
+# nothing to provision and no external database to configure.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: demo
+    ports:
+      - "5000:5000"
+    environment:
+      PRIMAVERA_MODE: demo
+      NODE_ENV: production
+      MEG_FINANCE_API_PORT: 5000
+      MEG_FINANCE_API_HOST: 0.0.0.0
+      STATIC_DIR: /app/dist
+      ALLOWED_ORIGINS: "http://localhost:5000,http://127.0.0.1:5000"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Hot-reload development stack: Vite on 5173 proxying the API on 5000.
+  #   docker compose --profile dev up --build
+  dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "5173:5173"
+      - "5001:5000"
+    volumes:
+      - ./src:/app/src
+      - ./server:/app/server
+    environment:
+      PRIMAVERA_MODE: demo
+      NODE_ENV: development
+      MEG_FINANCE_API_HOST: 0.0.0.0

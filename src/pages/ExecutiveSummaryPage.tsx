@@ -1,6 +1,7 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Sparkles } from "lucide-react";
 import { apiUrl, isStatic } from "@/lib/api";
+import { PageWrapper, SectionHeader, KPIGrid, PageLoadingState } from "@/components";
 
 export default function ExecutiveSummaryPage() {
   const [summary, setSummary] = useState("");
@@ -19,19 +20,32 @@ export default function ExecutiveSummaryPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  if (loading) {
+    return <PageWrapper><PageLoadingState /></PageWrapper>;
+  }
+
+  const items = [
+    { label: "Status", value: "Pronto", tone: "success" as const },
+    { label: "Método", value: "IA Gemini", tone: "default" as const },
+    { label: "Tipo", value: "Executivo", tone: "default" as const },
+    { label: "Atualização", value: "Sob pedido", tone: "warning" as const },
+    { label: "Abrangência", value: "Completa", tone: "default" as const },
+  ];
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold flex items-center gap-2">
-        <Sparkles className="w-6 h-6 text-yellow-500" />
-        Sumário Executivo com IA
-      </h1>
-      {loading ? (
-        <div className="text-center py-12">Gerando com IA...</div>
-      ) : (
-        <div className="bg-white p-6 rounded shadow prose prose-sm max-w-none">
-          <p>{summary}</p>
-        </div>
-      )}
-    </div>
+    <PageWrapper>
+      <SectionHeader category="Análise com IA" title="Sumário Executivo" description="Análise gerada por IA do estado financeiro atual com insights e recomendações" />
+      <div className="mt-5"><KPIGrid items={items} /></div>
+
+        <div className="bg-background rounded-xl shadow-sm border border-border overflow-hidden">
+          <div className="border-b border-border px-8 py-3 flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-yellow-500" />
+            <h2 className="text-sm font-semibold text-muted-foreground tracking-wider">Análise Executiva</h2>
+          </div>
+          <div className="p-8">
+            <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{summary}</p>
+          </div>
+      </div>
+    </PageWrapper>
   );
 }

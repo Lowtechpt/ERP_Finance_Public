@@ -9,16 +9,38 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
+          # node:sqlite, used by the demo backend, needs Node 22.5+.
           node-version: "22"
           cache: "npm"
 
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm run build
+
+      - name: Typecheck (frontend + server)
+        run: npm run typecheck
+
+      - name: Build frontend and server
+        run: npm run build
+
+      - name: Unit tests
+        run: npm run test
+        env:
+          CI: true
+
+      - name: Backend integration tests (SQLite demo)
+        run: npm run test:node
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7

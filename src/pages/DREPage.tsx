@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
+import { BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiUrl } from "@/lib/api";
-
-const fmt = (n: number) => new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(n);
-const fmtPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
+import { PageWrapper, SectionHeader, KPIGrid, PageLoadingState, PageEmptyState } from "@/components";
+import { formatCurrency, formatPercent } from "@/lib/format";
 
 type DREData = {
   period: string;
@@ -37,8 +37,8 @@ export default function DREPage() {
     return () => { ignore = true; };
   }, []);
 
-  if (loading) return <div className="flex min-h-[400px] items-center justify-center text-sm text-muted-foreground">A carregar DRE...</div>;
-  if (!data) return <div className="p-6 text-sm text-muted-foreground">Sem dados de DRE disponíveis.</div>;
+  if (loading) return <PageLoadingState message="A carregar dados de DRE..." />;
+  if (!data) return <PageEmptyState title="Sem dados de DRE" description="Nenhum dado de demonstração de resultados disponível" icon={BarChart3} />;
 
   const rows = [
     { label: "Vendas de mercadorias", value: data.vendasMercadorias, type: "revenue" },
@@ -53,67 +53,78 @@ export default function DREPage() {
     { label: "Lucro líquido", value: data.lucroLiquido, type: "result", pct: data.lucroLiquidoPct, bold: true },
   ];
 
+  const kpis = [
+    { label: "Vendas Líquidas", value: formatCurrency(data.vendasLiquidas), tone: "default" as const },
+    { label: "Custos Totais", value: formatCurrency(data.custoTotal), tone: "danger" as const },
+    { label: "Margem Bruta", value: formatCurrency(data.margemBruta), tone: data.margemBrutaPct >= 0 ? "success" as const : "danger" as const },
+    { label: "Margem Bruta %", value: formatPercent(data.margemBrutaPct), tone: data.margemBrutaPct >= 0 ? "success" as const : "danger" as const },
+    { label: "EBITDA %", value: formatPercent(data.ebitdaPct), tone: data.ebitdaPct >= 0 ? "info" as const : "danger" as const },
+  ];
+
   return (
-    <section className="rounded-lg border border-border bg-background shadow-[0_1px_6px_rgba(15,23,42,0.06)]">
-      <div className="flex items-center justify-between border-b border-border p-6">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary">ANÁLISE FINANCEIRA</p>
-          <h2 className="mt-2 text-[24px] font-bold">DRE e margens</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{data.period} — Demonstração de resultados detalhada.</p>
-        </div>
-        <span className="rounded bg-success-soft px-2 py-1 text-xs font-semibold text-success">PRIMAVERA SQL</span>
-      </div>
+    <PageWrapper>
+      <SectionHeader
+        category="Demonstração de Resultados"
+        categoryIcon={BarChart3}
+        title="DRE e Margens"
+        description={`${data.period} — Demonstração de resultados detalhada`}
+      />
 
-      <div className="p-6">
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full min-w-[700px] text-sm">
-            <thead>
-              <tr className="border-b bg-muted/30 text-left text-xs text-muted-foreground">
-                <th className="px-4 py-3 w-[320px]">Conta</th>
-                <th className="px-4 py-3 text-right">Valor</th>
-                <th className="px-4 py-3 text-right w-32">% Vendas</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => {
-                const isPositive = row.value >= 0;
-                const pct = data.vendasLiquidas && row.type !== "total" && row.type !== "result"
-                  ? (Math.abs(row.value) / data.vendasLiquidas) * 100 * (row.value < 0 ? -1 : 1)
-                  : null;
-                return (
-                  <tr key={i} className={cn("border-b hover:bg-muted/20", row.bold && "font-semibold")}>
-                    <td className="px-4 py-3">{row.label}</td>
-                    <td className={cn("px-4 py-3 text-right font-medium", row.type === "revenue" && "text-success", row.type === "cost" && "text-danger", row.type === "margin" && (isPositive ? "text-success" : "text-danger"), row.type === "result" && (isPositive ? "text-success" : "text-danger"), row.type === "total" && "text-foreground")}>
-                      {fmt(row.value)}
-                    </td>
-                    <td className={cn("px-4 py-3 text-right text-xs", pct !== null && (pct >= 0 ? "text-success" : "text-danger"))}>
-                      {pct !== null ? fmtPct(pct) : "—"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      <KPIGrid items={kpis} className="mb-5" />
+
+
+        <div className="bg-background rounded-xl shadow-sm border border-border overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border bg-muted/60">
+                  <th className="px-8 py-6 text-left text-xs font-semibold text-muted-foreground tracking-wider">Conta</th>
+                  <th className="px-8 py-6 text-right text-xs font-semibold text-muted-foreground tracking-wider">Valor</th>
+                  <th className="px-8 py-6 text-right text-xs font-semibold text-muted-foreground tracking-wider">% Vendas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => {
+                  const isPositive = row.value >= 0;
+                  const pct = data.vendasLiquidas && row.type !== "total" && row.type !== "result"
+                    ? (Math.abs(row.value) / data.vendasLiquidas) * 100 * (row.value < 0 ? -1 : 1)
+                    : null;
+                  return (
+                    <tr key={i} className={cn("border-b border-border hover:bg-muted/40 transition-colors text-sm", row.bold && "bg-muted/50 font-semibold")}>
+                      <td className="px-8 py-5 text-foreground font-medium">{row.label}</td>
+                      <td className={cn("px-8 py-5 text-right font-semibold tabular-nums", row.type === "revenue" && "text-success", row.type === "cost" && "text-danger", row.type === "margin" && (isPositive ? "text-success" : "text-danger"), row.type === "result" && (isPositive ? "text-success" : "text-danger"), row.type === "total" && "text-foreground font-bold")}>
+                        {formatCurrency(row.value)}
+                      </td>
+                      <td className={cn("px-8 py-5 text-right text-xs tabular-nums font-semibold", pct !== null && (pct >= 0 ? "text-success" : "text-danger"))}>
+                        {pct !== null ? formatPercent(pct) : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-          <div className={cn("rounded-lg border p-5", data.margemBruta >= 0 ? "border-success/30 bg-success/5" : "border-danger/30 bg-danger/5")}>
-            <p className="text-xs font-semibold text-muted-foreground">Margem Bruta</p>
-            <p className={cn("mt-2 text-2xl font-bold", data.margemBruta >= 0 ? "text-success" : "text-danger")}>{fmt(data.margemBruta)}</p>
-            <p className={cn("text-sm", data.margemBrutaPct >= 0 ? "text-success" : "text-danger")}>{fmtPct(data.margemBrutaPct)} das vendas líquidas</p>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className={cn("rounded-lg border p-4 shadow-sm", data.margemBruta >= 0 ? "border-success/20 bg-success-soft/30" : "border-danger/20 bg-danger-soft/30")}>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Margem Bruta</p>
+            <p className={cn("mt-1.5 text-2xl font-semibold tabular-nums", data.margemBruta >= 0 ? "text-success" : "text-danger")}>{formatCurrency(data.margemBruta)}</p>
+            <p className={cn("mt-2 text-sm tabular-nums", data.margemBrutaPct >= 0 ? "text-success" : "text-danger")}>{formatPercent(data.margemBrutaPct)} das vendas líquidas</p>
           </div>
-          <div className={cn("rounded-lg border p-5", data.ebitda >= 0 ? "border-success/30 bg-success/5" : "border-danger/30 bg-danger/5")}>
-            <p className="text-xs font-semibold text-muted-foreground">EBITDA</p>
-            <p className={cn("mt-2 text-2xl font-bold", data.ebitda >= 0 ? "text-success" : "text-danger")}>{fmt(data.ebitda)}</p>
-            <p className={cn("text-sm", data.ebitdaPct >= 0 ? "text-success" : "text-danger")}>{fmtPct(data.ebitdaPct)} das vendas líquidas</p>
+
+          <div className={cn("rounded-lg border p-4 shadow-sm", data.ebitda >= 0 ? "border-info/20 bg-info-soft/30" : "border-danger/20 bg-danger-soft/30")}>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">EBITDA</p>
+            <p className={cn("mt-1.5 text-2xl font-semibold tabular-nums", data.ebitda >= 0 ? "text-info" : "text-danger")}>{formatCurrency(data.ebitda)}</p>
+            <p className={cn("mt-2 text-sm", data.ebitdaPct >= 0 ? "text-info" : "text-danger")}>{formatPercent(data.ebitdaPct)} das vendas líquidas</p>
           </div>
-          <div className={cn("rounded-lg border p-5", data.lucroLiquido >= 0 ? "border-success/30 bg-success/5" : "border-danger/30 bg-danger/5")}>
-            <p className="text-xs font-semibold text-muted-foreground">Lucro Líquido</p>
-            <p className={cn("mt-2 text-2xl font-bold", data.lucroLiquido >= 0 ? "text-success" : "text-danger")}>{fmt(data.lucroLiquido)}</p>
-            <p className={cn("text-sm", data.lucroLiquidoPct >= 0 ? "text-success" : "text-danger")}>{fmtPct(data.lucroLiquidoPct)} das vendas líquidas</p>
+
+          <div className={cn("rounded-lg border p-4 shadow-sm", data.lucroLiquido >= 0 ? "border-border bg-muted/30" : "border-danger/20 bg-danger-soft/30")}>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Lucro Líquido</p>
+            <p className={cn("mt-1.5 text-2xl font-semibold tabular-nums", data.lucroLiquido >= 0 ? "text-foreground" : "text-danger")}>{formatCurrency(data.lucroLiquido)}</p>
+            <p className={cn("mt-2 text-sm", data.lucroLiquidoPct >= 0 ? "text-success" : "text-danger")}>{formatPercent(data.lucroLiquidoPct)} das vendas líquidas</p>
           </div>
         </div>
-      </div>
-    </section>
+    </PageWrapper>
   );
 }

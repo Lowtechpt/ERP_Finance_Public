@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { apiUrl } from "@/lib/api";
-
-const fmt = (n: number) => new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(n);
+import { formatCurrency } from "@/lib/format";
+import { PageWrapper, SectionHeader, KPIGrid, PageLoadingState } from "@/components";
 
 type KPIs = { saldoBancario: number; recebiveis: number; aPagar: number; stock: number; capitalCirculante: number; dso: number; vendas: number };
 type CFSummary = { totalIncoming: number; totalOutgoing: number; projectedBalance: number };
@@ -18,7 +18,7 @@ function RiskBadge({ level }: { level: "baixo" | "medio" | "alto" | "critico" })
     critico: { cls: "bg-danger text-white",           label: "Risco crítico" },
   };
   const { cls, label } = map[level];
-  return <span className={cn("rounded px-2 py-1 text-xs font-bold", cls)}>{label}</span>;
+  return <span className={cn("rounded-md px-2 py-1 text-xs font-bold", cls)}>{label}</span>;
 }
 
 export default function LiquidityPage() {
@@ -90,85 +90,87 @@ export default function LiquidityPage() {
   // Cobertura: consigo pagar o vencido com o saldo actual?
   const coverageRatio = totalPayOverdue > 0 ? saldo / totalPayOverdue : null;
 
-  return (
-    <section className="rounded-lg border border-border bg-background shadow-[0_1px_6px_rgba(15,23,42,0.06)]">
-      <div className="flex items-center justify-between border-b border-border p-6">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary">TESOURARIA</p>
-          <h2 className="mt-2 text-[24px] font-bold">Risco de liquidez</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Rácios, cobertura de pagamentos e projeção de caixa 30/60/90 dias.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {!loading && <RiskBadge level={riskLevel} />}
-          <span className="rounded bg-success-soft px-2 py-1 text-xs font-semibold text-success">PRIMAVERA SQL</span>
-        </div>
-      </div>
+  type ToneType = "default" | "success" | "danger" | "warning" | "info";
 
-      {loading ? (
-        <div className="flex min-h-[300px] items-center justify-center text-sm text-muted-foreground">A carregar...</div>
-      ) : (
-        <>
-          {/* Rácios de liquidez */}
-          <div className="border-b border-border p-6">
-            <p className="mb-3 text-xs font-semibold uppercase text-muted-foreground">Rácios de liquidez</p>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              {[
-                { label: "Liquidez imediata",  value: liquidezImediata,  desc: "Caixa / Passivo circulante", threshold: [0.2, 0.5] },
-                { label: "Liquidez reduzida",  value: liquidezReduzida,  desc: "(Caixa + Recebíveis) / Passivo", threshold: [0.8, 1.0] },
-                { label: "Liquidez geral",     value: liquidezGeral,     desc: "(Caixa + Rec. + Stock) / Passivo", threshold: [1.0, 1.5] },
-                { label: "Cobertura vencido",  value: coverageRatio,     desc: "Caixa / Pagamentos vencidos", threshold: [0.5, 1.0] },
-              ].map((r) => {
-                const v = r.value;
-                const cls = v === null ? "text-muted-foreground"
-                  : v < (r.threshold[0] ?? 0) ? "text-danger"
-                  : v < (r.threshold[1] ?? 1) ? "text-warning"
-                  : "text-success";
-                return (
-                  <div key={r.label} className="rounded-lg border border-border bg-muted/20 p-4">
-                    <p className="text-xs text-muted-foreground">{r.label}</p>
-                    <p className={cn("mt-2 text-2xl font-bold", cls)}>{v !== null ? v.toFixed(2) : "—"}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{r.desc}</p>
-                    <p className="text-xs text-muted-foreground">Referência: &gt;{(r.threshold[1] ?? 1).toFixed(1)}</p>
-                  </div>
-                );
-              })}
-            </div>
+  const getKpiTone = (value: number | null, low: number, medium: number, invertLogic?: boolean): ToneType => {
+    if (value === null) return "default";
+    if (invertLogic) {
+      if (value >= medium) return "success";
+      if (value >= low) return "warning";
+      return "danger";
+    }
+    if (value < low) return "danger";
+    if (value < medium) return "warning";
+    return "success";
+  };
+
+  const saldoTone: ToneType = saldo < 0 ? "danger" : "success";
+  const headerKpis: Array<{ label: string; value: string; tone: ToneType }> = [
+    { label: "Liquidez imediata", value: liquidezImediata !== null ? liquidezImediata.toFixed(2) : "—", tone: getKpiTone(liquidezImediata, 0.2, 0.5) },
+    { label: "Liquidez reduzida", value: liquidezReduzida !== null ? liquidezReduzida.toFixed(2) : "—", tone: getKpiTone(liquidezReduzida, 0.8, 1.0) },
+    { label: "Liquidez geral", value: liquidezGeral !== null ? liquidezGeral.toFixed(2) : "—", tone: getKpiTone(liquidezGeral, 1.0, 1.5) },
+    { label: "Cobertura vencido", value: coverageRatio !== null ? coverageRatio.toFixed(2) : "—", tone: getKpiTone(coverageRatio, 0.5, 1.0) },
+    { label: "Saldo bancário", value: formatCurrency(saldo), tone: saldoTone },
+  ];
+
+  if (loading) {
+    return <PageLoadingState message="A carregar..." />;
+  }
+
+  return (
+    <PageWrapper>
+      <div className="space-y-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <SectionHeader
+              category="Tesouraria"
+              title="Risco de liquidez"
+              description="Rácios, cobertura de pagamentos e projeção de caixa 30/60/90 dias."
+            />
           </div>
+          <div className="flex items-center gap-2">
+            {!loading && <RiskBadge level={riskLevel} />}
+            <span className="rounded-md bg-success-soft px-2 py-1 text-xs font-semibold text-success">PRIMAVERA SQL</span>
+          </div>
+        </div>
+
+        <>
+          <KPIGrid items={headerKpis} />
 
           {/* Posição de caixa */}
-          <div className="border-b border-border p-6">
-            <p className="mb-3 text-xs font-semibold uppercase text-muted-foreground">Posição actual</p>
+          <div className="mt-5 rounded-xl border border-border bg-background p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-info">Posição actual</p>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <div className="rounded-lg border border-border bg-muted/20 p-4">
-                <p className="text-xs text-muted-foreground">Saldo bancário</p>
-                <p className={cn("mt-2 text-xl font-bold", saldo < 0 ? "text-danger" : "text-success")}>{fmt(saldo)}</p>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/20 p-4">
+              <div className="rounded-lg border border-border bg-background p-4">
                 <p className="text-xs text-muted-foreground">Recebíveis em aberto</p>
-                <p className="mt-2 text-xl font-bold">{fmt(recebiveis)}</p>
+                <p className="mt-2 text-xl font-bold tabular-nums text-foreground">{formatCurrency(recebiveis)}</p>
               </div>
-              <div className={cn("rounded-lg border p-4", totalPayOverdue > saldo ? "border-danger/30 bg-danger/5" : "border-border bg-muted/20")}>
+              <div className={cn("rounded-lg border p-4", totalPayOverdue > saldo ? "border-danger/20 bg-danger-soft/40" : "border-border bg-background")}>
                 <p className="text-xs text-muted-foreground">Pagamentos vencidos</p>
-                <p className="mt-2 text-xl font-bold text-danger">{fmt(totalPayOverdue)}</p>
+                <p className="mt-2 text-xl font-bold text-danger tabular-nums">{formatCurrency(totalPayOverdue)}</p>
                 <p className="text-xs text-muted-foreground">{payOverdue.length} documentos</p>
               </div>
-              <div className="rounded-lg border border-border bg-muted/20 p-4">
+              <div className="rounded-lg border border-border bg-background p-4">
                 <p className="text-xs text-muted-foreground">Saldo projetado (90d)</p>
                 <p className={cn("mt-2 text-xl font-bold", (cfSummary?.projectedBalance ?? 0) < 0 ? "text-danger" : "text-success")}>
-                  {fmt(cfSummary?.projectedBalance ?? 0)}
+                  <span className="tabular-nums">{formatCurrency(cfSummary?.projectedBalance ?? 0)}</span>
                 </p>
+              </div>
+              <div className="rounded-lg border border-border bg-background p-4">
+                <p className="text-xs text-muted-foreground">Stock</p>
+                <p className="mt-2 text-xl font-bold tabular-nums text-foreground">{formatCurrency(stock)}</p>
               </div>
             </div>
           </div>
 
           {/* Projeção 30/60/90 dias */}
-          <div className="border-b border-border p-6">
-            <p className="mb-3 text-xs font-semibold uppercase text-muted-foreground">Recebimentos esperados por prazo</p>
+          <div className="mt-5 rounded-xl border border-border bg-background p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-info">Recebimentos esperados por prazo</p>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               {recByBucket.map((b) => (
-                <div key={b.label} className="rounded-lg border border-border bg-muted/20 p-4">
-                  <p className="text-xs font-semibold text-primary">{b.label}</p>
-                  <p className="mt-2 text-xl font-bold text-success">{fmt(b.amount)}</p>
+                <div key={b.label} className="rounded-lg border border-border bg-background p-4">
+                  <p className="text-xs font-semibold text-info">{b.label}</p>
+                  <p className="mt-2 text-xl font-bold text-success tabular-nums">{formatCurrency(b.amount)}</p>
                   <p className="text-xs text-muted-foreground">{b.count} documentos</p>
                 </div>
               ))}
@@ -176,42 +178,42 @@ export default function LiquidityPage() {
           </div>
 
           {/* Pagamentos a vencer */}
-          <div className="grid gap-0 border-b border-border md:grid-cols-2">
-            <div className="border-r border-border p-6">
-              <h3 className="mb-3 font-bold text-danger">Pagamentos vencidos ({payOverdue.length})</h3>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-border bg-background p-4">
+              <h3 className="mb-3 font-semibold tracking-tight text-danger">Pagamentos vencidos ({payOverdue.length})</h3>
               {payOverdue.length === 0 ? (
                 <p className="text-sm text-success">Sem pagamentos vencidos.</p>
               ) : (
                 <div className="space-y-2">
                   {payOverdue.slice(0, 8).map((p, i) => (
-                    <div key={i} className="flex items-center justify-between rounded border border-danger/20 bg-danger/5 px-3 py-2 text-sm">
+                    <div key={i} className="flex items-center justify-between rounded-xl border border-danger/20 bg-danger-soft/40 px-3 py-2 text-sm">
                       <div>
-                        <p className="font-medium">{p.supplierName}</p>
+                        <p className="font-medium text-muted-foreground">{p.supplierName}</p>
                         <p className="text-xs text-muted-foreground">{p.doc} · +{p.daysOverdue} dias</p>
                       </div>
-                      <p className="font-bold text-danger">{fmt(Number(p.totalAmount))}</p>
+                      <p className="font-bold text-danger tabular-nums">{formatCurrency(Number(p.totalAmount))}</p>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-            <div className="p-6">
-              <h3 className="mb-3 font-bold">Próximos a vencer</h3>
+            <div className="rounded-xl border border-border bg-background p-4">
+              <h3 className="mb-3 font-semibold tracking-tight text-foreground">Próximos a vencer</h3>
               <div className="space-y-2">
                 {payUpcoming.map((p, i) => (
-                  <div key={i} className="flex items-center justify-between rounded border border-border px-3 py-2 text-sm">
+                  <div key={i} className="flex items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
                     <div>
-                      <p className="font-medium">{p.supplierName}</p>
+                      <p className="font-medium text-muted-foreground">{p.supplierName}</p>
                       <p className="text-xs text-muted-foreground">{p.doc} · {p.dueDate}</p>
                     </div>
-                    <p className="font-semibold">{fmt(Number(p.totalAmount))}</p>
+                    <p className="font-semibold tabular-nums text-muted-foreground">{formatCurrency(Number(p.totalAmount))}</p>
                   </div>
                 ))}
               </div>
             </div>
           </div>
         </>
-      )}
-    </section>
+      </div>
+    </PageWrapper>
   );
 }

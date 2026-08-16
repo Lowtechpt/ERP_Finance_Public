@@ -1,11 +1,12 @@
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, existsSync, unlinkSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
-import seedData from "./seed-data.mjs";
+import seedData from "./seed-data.js";
 
-const DIR = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(DIR, "erp-finance-demo.sqlite");
+// Resolved from the project root, not the module: the compiled output lives in
+// dist/server/db while the schema and database file stay in the repo.
+const DIR = path.resolve(process.cwd(), "server/db");
+const DB_PATH = process.env.DEMO_DB_PATH ?? path.join(DIR, "erp-finance-demo.sqlite");
 const SCHEMA_PATH = path.join(DIR, "schema.sql");
 
 if (existsSync(DB_PATH)) unlinkSync(DB_PATH);
@@ -30,7 +31,13 @@ try {
       );
 
       for (const row of rows) {
-        stmt.run(...columns.map((col) => row[col] ?? null));
+        const values = columns.map((col) => {
+          const val = (row as Record<string, unknown>)[col];
+          if (val === null || val === undefined) return null as any;
+          if (typeof val === "string" || typeof val === "number" || typeof val === "boolean") return val as any;
+          return String(val) as any;
+        });
+        stmt.run(...values);
       }
     }
 

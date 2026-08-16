@@ -1,8 +1,8 @@
-// Synthetic demo data for MEG-Finance's portable SQLite backend.
+// Synthetic demo data for ERP Finance's portable SQLite backend.
 // Row shapes mirror server/db/schema.sql exactly (column names/order).
 // Numbers are deterministic (seeded PRNG) so the demo dataset is reproducible.
 
-function mulberry32(seed) {
+function mulberry32(seed: number): () => number {
   return function () {
     seed |= 0;
     seed = (seed + 0x6d2b79f5) | 0;
@@ -11,19 +11,256 @@ function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-const rnd = mulberry32(20260614);
-const randInt = (min, max) => Math.floor(rnd() * (max - min + 1)) + min;
-const randFloat = (min, max, dec = 2) => Number((rnd() * (max - min) + min).toFixed(dec));
-const pick = (arr) => arr[randInt(0, arr.length - 1)];
 
-function addDaysStr(dateStr, days) {
+const rnd = mulberry32(20260614);
+const randInt = (min: number, max: number): number => Math.floor(rnd() * (max - min + 1)) + min;
+const randFloat = (min: number, max: number, dec: number = 2): number => Number((rnd() * (max - min) + min).toFixed(dec));
+const pick = <T,>(arr: T[]): T => arr[randInt(0, arr.length - 1)];
+
+function addDaysStr(dateStr: string, days: number): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
   dt.setUTCDate(dt.getUTCDate() + days);
   return dt.toISOString().slice(0, 10);
 }
-function monthStr(y, m) {
+
+function monthStr(y: number, m: number): string {
   return `${y}-${String(m).padStart(2, "0")}-15`;
+}
+
+// Type definitions for data structures
+interface Cliente {
+  Cliente: string;
+  Nome: string;
+  Email: string;
+  Fac_Tel: string;
+  NumContrib: string;
+  Moeda: string;
+  TotalDeb: number;
+  LimiteCred: number;
+  CondPag: string;
+  Vendedor: string;
+  ClienteAnulado: number;
+}
+
+interface Fornecedor {
+  Fornecedor: string;
+  Nome: string;
+  NumContrib: string;
+}
+
+interface Artigo {
+  Artigo: string;
+  Descricao: string;
+  Familia: string;
+  UnidadeVenda: string;
+  PCMedio: number;
+  PCUltimo: number;
+}
+
+interface CabecDocRecord {
+  TipoDoc: string;
+  Serie: string;
+  NumDoc: number;
+  Data: string;
+  DataVencimento: string;
+  Entidade: string;
+  TipoEntidade: string;
+  Moeda: string;
+  CondPag: string;
+  RespCobranca: string;
+  Referencia: string;
+  TotalDocumento: number;
+  TotalMerc: number;
+  TotalIva: number;
+  TotalDesc: number;
+}
+
+interface CabecDocStatus {
+  IdCabecDoc: number;
+  Anulado: number;
+}
+
+interface LinhasDocRecord {
+  IdCabecDoc: number;
+  NumLinha: number;
+  Artigo: string;
+  Descricao: string;
+  Quantidade: number;
+  PrecUnit: number;
+  Desconto1: number;
+  TotalIliquido: number;
+  PrecoLiquido: number;
+  TaxaIva: number;
+  TotalIva: number;
+  Armazem: string;
+  CustoMercadoriasMBase: number;
+}
+
+interface CabecComprasRecord {
+  TipoDoc: string;
+  Serie: string;
+  NumDoc: number;
+  Entidade: string;
+  DataDoc: string;
+  DataVencimento: string;
+  TotalDocumento: number;
+  TotalMerc: number;
+  TotalIva: number;
+  TotalDesc: number;
+  Moeda: string;
+  CondPag: string;
+  NumContribuinte: string;
+  Nome: string;
+}
+
+interface LinhasComprasRecord {
+  IdCabecCompras: number;
+  NumLinha: number;
+  Artigo: string;
+  Quantidade: number;
+  PrecUnit: number;
+}
+
+interface ContaBancaria {
+  Conta: string;
+  DescBanco: string;
+  Banco: string;
+  Moeda: string;
+  TipoConta: string;
+  Limite: number;
+}
+
+interface CabecTesourariaRecord {
+  TipoDoc: string;
+  Serie: string;
+  NumDoc: number;
+  Entidade: string;
+  TipoEntidade: string;
+  TotalDebito: number;
+  TotalCredito: number;
+  ContaOrigem: string;
+  ContaDestino: string;
+  Moeda: string;
+  Observacoes: string;
+  DataUltimaActualizacao: string;
+}
+
+interface Funcionario {
+  Codigo: string;
+  Nome: string;
+  Categoria: string;
+  Situacao: string;
+  Vencimento: number;
+  DataAdmissao: string;
+  DataFimContrato: string;
+  TipoContrato: string;
+  Qualificacao: string;
+  CentroCusto: string;
+}
+
+interface PlanoContas {
+  Conta: string;
+  Descricao: string;
+}
+
+interface Movimento {
+  Conta: string;
+  Natureza: string;
+  Valor: number;
+  Ano: number;
+  Mes: number;
+  DataGravacao: string;
+  Diario: string;
+}
+
+interface GPROrdemFabrico {
+  OrdemFabrico: string;
+  Artigo: string;
+  QtOrdemFabrico: number;
+  CustoMateriaisPrevisto: number;
+  CustoMateriaisReal: number;
+  CustoTransformacaoPrevisto: number;
+  CustoTransformacaoReal: number;
+  OutrosCustosPrevito: number;
+  OutrosCustosReal: number;
+  DataOrdemFabrico: string;
+  Estado: number;
+}
+
+interface GPROrdemFabricoComponentes {
+  IDOrdemFabrico: number;
+  Componente: string;
+  QtPrevista: number;
+  QtConsumida: number;
+  Preco: number;
+}
+
+interface GPROrdemFabricoOperacoes {
+  IDOrdemFabrico: number;
+  Operacao: string;
+  TempoPrevisto: number;
+  TempoConsumido: number;
+  CustoOperador: number;
+  CustoMaquina: number;
+}
+
+interface INVValoresActuaisStock {
+  Artigo: string;
+  EstadoStock: string;
+  Stock: number;
+  DataStock: string;
+}
+
+interface INVValoresActuaisCusteio {
+  Artigo: string;
+  GrupoCustos: string;
+  CustoGrpCstMBase: number;
+  CustoGrpCstLotMBase: number;
+  DataCusteio: string;
+}
+
+interface FuncRecibo {
+  CodFunc: string;
+}
+
+interface FuncReciboProcs {
+  ReciboID: number;
+  TotalDeRemuneracoes: number;
+  TotalDeDescontos: number;
+  TotalLiquido: number;
+}
+
+interface RHPFerias {
+  CodFunc: string;
+  DataInicio: string;
+  DataFim: string;
+}
+
+interface RHPHistoricoRegistoVinculo {
+  CodFunc: string;
+  DataFim: string;
+}
+
+interface Contacto {
+  Nome: string;
+  Email: string;
+  Telefone: string;
+  Empresa: string;
+}
+
+interface Armazem {
+  Codigo: string;
+  Descricao: string;
+}
+
+interface Vendedor {
+  Codigo: string;
+  Nome: string;
+}
+
+interface VersaoModuloRecord {
+  Modulo: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -38,7 +275,8 @@ const clienteNomes = [
   "Vidros do Cávado", "Plásticos Ribeiro", "Ferro & Aço Bragança", "Comercial Setúbal",
   "Distribuição Algarve", "Componentes Aveiro", "Soluções Industriais Coimbra",
 ];
-const Clientes = clienteNomes.map((nome, i) => ({
+
+const Clientes: Cliente[] = clienteNomes.map((nome, i) => ({
   Cliente: `CL${String(i + 1).padStart(3, "0")}`,
   Nome: nome,
   Email: `geral@${nome.toLowerCase().replace(/[^a-z0-9]+/g, "")}.pt`,
@@ -60,7 +298,8 @@ const fornecedorNomes = [
   "Embalagens Sul", "Transportes Rápido Lda", "Ferragens Industriais Costa",
   "Componentes Eletrónicos Braga", "Matérias-Primas Atlântico", "Logística Douro",
 ];
-const Fornecedores = fornecedorNomes.map((nome, i) => ({
+
+const Fornecedores: Fornecedor[] = fornecedorNomes.map((nome, i) => ({
   Fornecedor: `FO${String(i + 1).padStart(3, "0")}`,
   Nome: nome,
   NumContrib: String(randInt(500000000, 599999999)),
@@ -69,7 +308,7 @@ const Fornecedores = fornecedorNomes.map((nome, i) => ({
 // ---------------------------------------------------------------------------
 // Artigo (60): 15 matérias-primas, 20 componentes, 25 acabados
 // ---------------------------------------------------------------------------
-const Artigo = [];
+const Artigo: Artigo[] = [];
 for (let i = 1; i <= 15; i++) {
   Artigo.push({
     Artigo: `MP${String(i).padStart(3, "0")}`,
@@ -100,6 +339,7 @@ for (let i = 1; i <= 25; i++) {
     PCUltimo: randFloat(20, 400, 2),
   });
 }
+
 const artigosMP = Artigo.filter((a) => a.Artigo.startsWith("MP")).map((a) => a.Artigo);
 const artigosCP = Artigo.filter((a) => a.Artigo.startsWith("CP")).map((a) => a.Artigo);
 const artigosA = Artigo.filter((a) => a.Artigo.startsWith("A")).map((a) => a.Artigo);
@@ -107,9 +347,9 @@ const artigosA = Artigo.filter((a) => a.Artigo.startsWith("A")).map((a) => a.Art
 // ---------------------------------------------------------------------------
 // CabecDoc (55 sales docs) + CabecDocStatus + LinhasDoc
 // ---------------------------------------------------------------------------
-const CabecDoc = [];
-const CabecDocStatus = [];
-const LinhasDoc = [];
+const CabecDoc: CabecDocRecord[] = [];
+const CabecDocStatus: CabecDocStatus[] = [];
+const LinhasDoc: LinhasDocRecord[] = [];
 
 for (let i = 0; i < 55; i++) {
   const data = addDaysStr("2025-07-01", Math.floor((i / 55) * 345) + randInt(0, 4));
@@ -171,8 +411,8 @@ for (let i = 0; i < 55; i++) {
 // ---------------------------------------------------------------------------
 // CabecCompras (45) + LinhasCompras
 // ---------------------------------------------------------------------------
-const CabecCompras = [];
-const LinhasCompras = [];
+const CabecCompras: CabecComprasRecord[] = [];
+const LinhasCompras: LinhasComprasRecord[] = [];
 
 for (let i = 0; i < 45; i++) {
   const dataDoc = addDaysStr("2025-07-01", Math.floor((i / 45) * 345) + randInt(0, 4));
@@ -215,13 +455,13 @@ for (let i = 0; i < 45; i++) {
 // ---------------------------------------------------------------------------
 // ContasBancarias (3) + CabecTesouraria (25)
 // ---------------------------------------------------------------------------
-const ContasBancarias = [
+const ContasBancarias: ContaBancaria[] = [
   { Conta: "BNC001", DescBanco: "Conta Ordem", Banco: "Millennium BCP", Moeda: "EUR", TipoConta: "Ordem", Limite: 2000 },
   { Conta: "BNC002", DescBanco: "Depósito a Prazo", Banco: "Caixa Geral de Depósitos", Moeda: "EUR", TipoConta: "Deposito", Limite: 0 },
   { Conta: "BNC003", DescBanco: "Conta USD", Banco: "Novo Banco", Moeda: "USD", TipoConta: "Ordem", Limite: 500 },
 ];
 
-const CabecTesouraria = [];
+const CabecTesouraria: CabecTesourariaRecord[] = [];
 for (let i = 0; i < 25; i++) {
   const data = addDaysStr("2026-04-16", randInt(0, 58));
   const isCredito = i % 2 === 0;
@@ -244,7 +484,7 @@ for (let i = 0; i < 25; i++) {
 // ---------------------------------------------------------------------------
 // Funcionarios (10)
 // ---------------------------------------------------------------------------
-const Funcionarios = [
+const Funcionarios: Funcionario[] = [
   { Codigo: "ADM01", Nome: "João Silva", Categoria: "Diretor", Situacao: "A", Vencimento: 2200, DataAdmissao: "2020-02-01", DataFimContrato: "", TipoContrato: "Efetivo", Qualificacao: "Licenciatura", CentroCusto: "ADM" },
   { Codigo: "ADM02", Nome: "Maria Santos", Categoria: "Gerente", Situacao: "A", Vencimento: 1800, DataAdmissao: "2021-03-15", DataFimContrato: "", TipoContrato: "Efetivo", Qualificacao: "Licenciatura", CentroCusto: "ADM" },
   { Codigo: "ADM03", Nome: "Ana Costa", Categoria: "Administrativo", Situacao: "A", Vencimento: 1100, DataAdmissao: "2022-06-01", DataFimContrato: "", TipoContrato: "Efetivo", Qualificacao: "12º ano", CentroCusto: "ADM" },
@@ -260,7 +500,7 @@ const Funcionarios = [
 // ---------------------------------------------------------------------------
 // PlanoContas + Movimentos
 // ---------------------------------------------------------------------------
-const PlanoContas = [
+const PlanoContas: PlanoContas[] = [
   { Conta: "121", Descricao: "Depósitos à Ordem" },
   { Conta: "122", Descricao: "Depósitos a Prazo" },
   { Conta: "211", Descricao: "Clientes c/c" },
@@ -293,8 +533,9 @@ const PlanoContas = [
   { Conta: "51", Descricao: "Capital" },
 ];
 
-const Movimentos = [];
-function addMov(conta, natureza, valor, ano, mes, diario) {
+const Movimentos: Movimento[] = [];
+
+function addMov(conta: string, natureza: string, valor: number, ano: number, mes: number, diario: string): void {
   Movimentos.push({
     Conta: conta,
     Natureza: natureza,
@@ -307,12 +548,13 @@ function addMov(conta, natureza, valor, ano, mes, diario) {
 }
 
 // 12 months of sales/CMV, Jul 2025 - Jun 2026
-const months12 = [];
+const months12: Array<{ ano: number; mes: number }> = [];
 for (let i = 0; i < 12; i++) {
   const m = ((6 + i) % 12) + 1; // starts July
   const y = m >= 7 ? 2025 : 2026;
   months12.push({ ano: y, mes: m });
 }
+
 for (const { ano, mes } of months12) {
   const vendasMes = randFloat(28000, 38000);
   addMov("711", "C", vendasMes, ano, mes, "GER");
@@ -346,9 +588,9 @@ for (let i = 0; i < 18; i++) {
 // ---------------------------------------------------------------------------
 // GPR_OrdemFabrico (7) + Componentes + Operacoes
 // ---------------------------------------------------------------------------
-const GPR_OrdemFabrico = [];
-const GPR_OrdemFabricoComponentes = [];
-const GPR_OrdemFabricoOperacoes = [];
+const GPR_OrdemFabrico: GPROrdemFabrico[] = [];
+const GPR_OrdemFabricoComponentes: GPROrdemFabricoComponentes[] = [];
+const GPR_OrdemFabricoOperacoes: GPROrdemFabricoOperacoes[] = [];
 
 for (let i = 0; i < 7; i++) {
   const estado = i < 4 ? 4 : 2; // 4 closed, 3 open
@@ -401,14 +643,14 @@ for (let i = 0; i < 7; i++) {
 // ---------------------------------------------------------------------------
 // INV_ValoresActuaisStock + INV_ValoresActuaisCusteio (one row per Artigo)
 // ---------------------------------------------------------------------------
-const INV_ValoresActuaisStock = Artigo.map((a, i) => ({
+const INV_ValoresActuaisStock: INVValoresActuaisStock[] = Artigo.map((a, i) => ({
   Artigo: a.Artigo,
   EstadoStock: "N",
   Stock: i < 10 ? randInt(0, 5) : randInt(10, 500),
   DataStock: "2026-06-10",
 }));
 
-const INV_ValoresActuaisCusteio = Artigo.map((a) => ({
+const INV_ValoresActuaisCusteio: INVValoresActuaisCusteio[] = Artigo.map((a) => ({
   Artigo: a.Artigo,
   GrupoCustos: a.Familia === "Materia-Prima" ? "MP" : a.Familia === "Componentes" ? "CP" : "PA",
   CustoGrpCstMBase: a.PCMedio,
@@ -417,13 +659,14 @@ const INV_ValoresActuaisCusteio = Artigo.map((a) => ({
 }));
 
 // INV_Movimentos: only ever COUNT(*)'d, so plain placeholder rows are enough.
-const INV_Movimentos = Array.from({ length: 270 }, () => ({}));
+const INV_Movimentos: Record<string, unknown>[] = Array.from({ length: 270 }, () => ({}));
 
 // ---------------------------------------------------------------------------
 // FuncRecibos (6/employee, Jan-Jun 2026, skipping months after departure)
 // ---------------------------------------------------------------------------
-const FuncRecibos = [];
-const FuncRecibosProcs = [];
+const FuncRecibos: FuncRecibo[] = [];
+const FuncRecibosProcs: FuncReciboProcs[] = [];
+
 for (const f of Funcionarios) {
   const lastMonth = f.DataFimContrato ? Number(f.DataFimContrato.split("-")[1]) - 1 : 6;
   const monthsWorked = f.Situacao === "A" ? 6 : Math.max(0, Math.min(6, lastMonth));
@@ -444,7 +687,7 @@ for (const f of Funcionarios) {
 // ---------------------------------------------------------------------------
 // RHP_Ferias + RHP_HistoricoRegistoVinculo
 // ---------------------------------------------------------------------------
-const RHP_Ferias = [];
+const RHP_Ferias: RHPFerias[] = [];
 for (const f of Funcionarios) {
   const periodos = randInt(1, 3);
   for (let p = 0; p < periodos; p++) {
@@ -453,7 +696,7 @@ for (const f of Funcionarios) {
   }
 }
 
-const RHP_HistoricoRegistoVinculo = Funcionarios.map((f) => ({
+const RHP_HistoricoRegistoVinculo: RHPHistoricoRegistoVinculo[] = Funcionarios.map((f) => ({
   CodFunc: f.Codigo,
   DataFim: f.DataFimContrato || "",
 }));
@@ -461,7 +704,7 @@ const RHP_HistoricoRegistoVinculo = Funcionarios.map((f) => ({
 // ---------------------------------------------------------------------------
 // Contactos, Armazens, Vendedores, VersaoModulo, DocumentosCCT
 // ---------------------------------------------------------------------------
-const Contactos = [
+const Contactos: Contacto[] = [
   { Nome: "Luís Baptista", Email: "luis.baptista@example.pt", Telefone: "912345678", Empresa: "Sofrio" },
   { Nome: "Sandra Pinto", Email: "sandra.pinto@example.pt", Telefone: "913456789", Empresa: "Microavi" },
   { Nome: "Miguel Rocha", Email: "miguel.rocha@example.pt", Telefone: "914567890", Empresa: "Worten" },
@@ -479,7 +722,7 @@ const Contactos = [
   { Nome: "Tiago Batista", Email: "tiago.batista@example.pt", Telefone: "916701234", Empresa: "Comercial Setúbal" },
 ];
 
-const Armazens = [
+const Armazens: Armazem[] = [
   { Codigo: "ARM01", Descricao: "Armazém Central" },
   { Codigo: "ARM02", Descricao: "Armazém Matérias-Primas" },
   { Codigo: "ARM03", Descricao: "Armazém Produto Acabado" },
@@ -487,7 +730,7 @@ const Armazens = [
   { Codigo: "ARM05", Descricao: "Armazém Devoluções" },
 ];
 
-const Vendedores = [
+const Vendedores: Vendedor[] = [
   { Codigo: "V01", Nome: "Joana Mota" },
   { Codigo: "V02", Nome: "Rita Gomes" },
   { Codigo: "V03", Nome: "Bruno Cardoso" },
@@ -499,9 +742,10 @@ const versaoModuloCodigos = [
   "FIL", "EAP", "PRJ", "PCM", "DFP", "INT", "GAB", "ORC", "COM", "COP", "EPK", "IAM",
   "SAF", "MOB", "APR", "CNO",
 ];
-const VersaoModulo = versaoModuloCodigos.map((Modulo) => ({ Modulo }));
 
-const DocumentosCCT = Array.from({ length: 20 }, () => ({}));
+const VersaoModulo: VersaoModuloRecord[] = versaoModuloCodigos.map((Modulo) => ({ Modulo }));
+
+const DocumentosCCT: Record<string, unknown>[] = Array.from({ length: 20 }, () => ({}));
 
 export default {
   Clientes,

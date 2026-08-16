@@ -1,13 +1,19 @@
 import { execFile } from "node:child_process";
 
-const SQL_SERVER = process.env.PRIMAVERA_SQL_SERVER ?? ".\\SQLEXPRESS";
-const SQL_DATABASE = process.env.PRIMAVERA_SQL_DATABASE ?? "PRIDEMO";
-const ERP_EXE = "C:\\Program Files\\PRIMAVERA\\SG100\\Apl\\Erp100EV.exe";
+export type PRIMAVERA_MODE = "sqlserver" | "demo";
 
-export const meta = { source: "PRIMAVERA SQL", server: SQL_SERVER, database: SQL_DATABASE };
+const SQL_SERVER: string = process.env.PRIMAVERA_SQL_SERVER ?? ".\\SQLEXPRESS";
+const SQL_DATABASE: string = process.env.PRIMAVERA_SQL_DATABASE ?? "PRIDEMO";
+const ERP_EXE: string = "C:\\Program Files\\PRIMAVERA\\SG100\\Apl\\Erp100EV.exe";
 
-function runSql(query) {
-  const args = [
+export const meta: { source: string; server: string; database: string } = {
+  source: "PRIMAVERA SQL",
+  server: SQL_SERVER,
+  database: SQL_DATABASE,
+};
+
+function runSql(query: string): Promise<string> {
+  const args: string[] = [
     "-S",
     SQL_SERVER,
     "-d",
@@ -24,28 +30,33 @@ function runSql(query) {
   ];
 
   return new Promise((resolve, reject) => {
-    execFile("sqlcmd", args, { windowsHide: true, maxBuffer: 1024 * 1024 * 8, encoding: "buffer" }, (error, stdout, stderr) => {
-      const output = decodeSqlcmdBuffer(stdout);
-      const errorOutput = decodeSqlcmdBuffer(stderr);
+    execFile(
+      "sqlcmd",
+      args,
+      { windowsHide: true, maxBuffer: 1024 * 1024 * 8, encoding: "buffer" },
+      (error, stdout, stderr) => {
+        const output = decodeSqlcmdBuffer(stdout);
+        const errorOutput = decodeSqlcmdBuffer(stderr);
 
-      if (error) {
-        reject(new Error(errorOutput || error.message));
-        return;
+        if (error) {
+          reject(new Error(errorOutput || error.message));
+          return;
+        }
+
+        resolve(output.replace(/^\uFEFF/, "").trim());
       }
-
-      resolve(output.replace(/^\uFEFF/, "").trim());
-    });
+    );
   });
 }
 
-function decodeSqlcmdBuffer(value) {
+function decodeSqlcmdBuffer(value: Buffer | string): string {
   if (!Buffer.isBuffer(value)) return String(value);
   const utf8 = value.toString("utf8");
   if (!utf8.includes("�")) return utf8;
   return decodeCp850(value);
 }
 
-const CP850_EXTENDED = [
+const CP850_EXTENDED: string[] = [
   "Ç", "ü", "é", "â", "ä", "à", "å", "ç", "ê", "ë", "è", "ï", "î", "ì", "Ä", "Å",
   "É", "æ", "Æ", "ô", "ö", "ò", "û", "ù", "ÿ", "Ö", "Ü", "ø", "£", "Ø", "×", "ƒ",
   "á", "í", "ó", "ú", "ñ", "Ñ", "ª", "º", "¿", "®", "¬", "½", "¼", "¡", "«", "»",
@@ -56,7 +67,7 @@ const CP850_EXTENDED = [
   "≡", "±", "‗", "¾", "¶", "§", "÷", "¸", "°", "¨", "·", "¹", "³", "²", "■", " ",
 ];
 
-function decodeCp850(buffer) {
+function decodeCp850(buffer: Buffer): string {
   let output = "";
   for (const byte of buffer) {
     output += byte < 128 ? String.fromCharCode(byte) : CP850_EXTENDED[byte - 128];
@@ -64,17 +75,17 @@ function decodeCp850(buffer) {
   return output;
 }
 
-function parseSqlJson(output) {
+function parseSqlJson<T = any>(output: string): T | null {
   const normalized = output
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith("("))
     .join("");
 
-  return normalized ? repairMojibake(JSON.parse(normalized)) : null;
+  return normalized ? (repairMojibake(JSON.parse(normalized)) as T) : null;
 }
 
-function repairMojibake(value) {
+function repairMojibake(value: unknown): unknown {
   if (typeof value === "string") {
     return repairText(value);
   }
@@ -85,14 +96,14 @@ function repairMojibake(value) {
 
   if (value && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, repairMojibake(entry)]),
+      Object.entries(value).map(([key, entry]) => [key, repairMojibake(entry)] as [string, unknown])
     );
   }
 
   return value;
 }
 
-function repairText(value) {
+function repairText(value: string): string {
   if (!value.includes("�")) return value;
 
   return value
@@ -116,7 +127,7 @@ function repairText(value) {
     .replaceAll("Cr�dito", "Crédito");
 }
 
-export async function getReceivables() {
+export async function getReceivables(): Promise<any[]> {
   const query = `
 DECLARE @today date = CAST(GETDATE() AS date);
 
@@ -152,7 +163,7 @@ FOR JSON PATH, INCLUDE_NULL_VALUES;
   return parseSqlJson(json) ?? [];
 }
 
-export async function getModules() {
+export async function getModules(): Promise<any[]> {
   const query = `
 SELECT *
 FROM (
@@ -185,7 +196,7 @@ FOR JSON PATH, INCLUDE_NULL_VALUES;
   return parseSqlJson(json) ?? [];
 }
 
-export async function getCustomers() {
+export async function getCustomers(): Promise<any[]> {
   const query = `
 SELECT TOP 25
   c.Cliente AS code,
@@ -213,15 +224,29 @@ FOR JSON PATH, INCLUDE_NULL_VALUES;
   return parseSqlJson(json) ?? [];
 }
 
-export async function getCashFlow() {
+export interface CashFlowResult {
+  receivablesByMonth: any[];
+  payablesByMonth: any[];
+  bankAccounts: any[];
+  treasuryMovements: any[];
+  summary: { totalIncoming: number; totalOutgoing: number; projectedBalance: number };
+}
+
+export async function getCashFlow(): Promise<CashFlowResult> {
   const today = new Date();
   const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
 
   const [receivablesRaw, payablesRaw, bankAccountsRaw, treasuryRaw] = await Promise.all([
-    runSql(`SELECT CONVERT(varchar(7), DataVencimento, 126) AS month, COUNT(*) AS docs, CAST(SUM(ISNULL(NULLIF(TotalDocumento,0), TotalMerc+TotalIva-TotalDesc)) AS decimal(18,2)) AS total FROM CabecDoc WHERE TipoEntidade='C' AND DataVencimento >= DATEADD(month,-3,GETDATE()) AND DataVencimento <= DATEADD(month,6,GETDATE()) GROUP BY CONVERT(varchar(7), DataVencimento, 126) ORDER BY 1 FOR JSON PATH`),
-    runSql(`SELECT CONVERT(varchar(7), DataVencimento, 126) AS month, COUNT(*) AS docs, CAST(SUM(ISNULL(NULLIF(TotalDocumento,0), TotalMerc+TotalIva-TotalDesc)) AS decimal(18,2)) AS total FROM CabecCompras WHERE DataVencimento >= DATEADD(month,-3,GETDATE()) AND DataVencimento <= DATEADD(month,6,GETDATE()) GROUP BY CONVERT(varchar(7), DataVencimento, 126) ORDER BY 1 FOR JSON PATH`),
+    runSql(
+      `SELECT CONVERT(varchar(7), DataVencimento, 126) AS month, COUNT(*) AS docs, CAST(SUM(ISNULL(NULLIF(TotalDocumento,0), TotalMerc+TotalIva-TotalDesc)) AS decimal(18,2)) AS total FROM CabecDoc WHERE TipoEntidade='C' AND DataVencimento >= DATEADD(month,-3,GETDATE()) AND DataVencimento <= DATEADD(month,6,GETDATE()) GROUP BY CONVERT(varchar(7), DataVencimento, 126) ORDER BY 1 FOR JSON PATH`
+    ),
+    runSql(
+      `SELECT CONVERT(varchar(7), DataVencimento, 126) AS month, COUNT(*) AS docs, CAST(SUM(ISNULL(NULLIF(TotalDocumento,0), TotalMerc+TotalIva-TotalDesc)) AS decimal(18,2)) AS total FROM CabecCompras WHERE DataVencimento >= DATEADD(month,-3,GETDATE()) AND DataVencimento <= DATEADD(month,6,GETDATE()) GROUP BY CONVERT(varchar(7), DataVencimento, 126) ORDER BY 1 FOR JSON PATH`
+    ),
     runSql(`SELECT Conta, DescBanco, Banco, Moeda, TipoConta FROM ContasBancarias FOR JSON PATH`),
-    runSql(`SELECT TOP 20 TipoDoc, CONCAT(TipoDoc,' ',Serie,'/',CAST(NumDoc AS varchar)) AS doc, ISNULL(Entidade,'') AS entidade, TipoEntidade, CAST(TotalDebito AS decimal(18,2)) AS debit, CAST(TotalCredito AS decimal(18,2)) AS credit, ISNULL(ContaOrigem,'') AS contaOrigem, Moeda FROM CabecTesouraria ORDER BY DataUltimaActualizacao DESC FOR JSON PATH`),
+    runSql(
+      `SELECT TOP 20 TipoDoc, CONCAT(TipoDoc,' ',Serie,'/',CAST(NumDoc AS varchar)) AS doc, ISNULL(Entidade,'') AS entidade, TipoEntidade, CAST(TotalDebito AS decimal(18,2)) AS debit, CAST(TotalCredito AS decimal(18,2)) AS credit, ISNULL(ContaOrigem,'') AS contaOrigem, Moeda FROM CabecTesouraria ORDER BY DataUltimaActualizacao DESC FOR JSON PATH`
+    ),
   ]);
 
   const receivablesByMonth = parseSqlJson(receivablesRaw) ?? [];
@@ -230,11 +255,11 @@ export async function getCashFlow() {
   const treasuryMovements = parseSqlJson(treasuryRaw) ?? [];
 
   const totalIncoming = receivablesByMonth
-    .filter((r) => r.month >= currentMonth && r.total > 0)
-    .reduce((sum, r) => sum + Number(r.total), 0);
+    .filter((r: any) => r.month >= currentMonth && r.total > 0)
+    .reduce((sum: number, r: any) => sum + Number(r.total), 0);
   const totalOutgoing = payablesByMonth
-    .filter((p) => p.month >= currentMonth)
-    .reduce((sum, p) => sum + Math.abs(Number(p.total)), 0);
+    .filter((p: any) => p.month >= currentMonth)
+    .reduce((sum: number, p: any) => sum + Math.abs(Number(p.total)), 0);
 
   return {
     receivablesByMonth,
@@ -249,7 +274,7 @@ export async function getCashFlow() {
   };
 }
 
-export async function getDocumentLines(docNumber) {
+export async function getDocumentLines(docNumber: string): Promise<any[]> {
   const query = `
 SELECT l.NumLinha, l.Artigo, ISNULL(l.Descricao,'') AS descricao,
   CAST(l.Quantidade AS decimal(18,4)) AS quantidade,
@@ -268,27 +293,23 @@ FOR JSON PATH`;
   return parseSqlJson(json) ?? [];
 }
 
-export function openErp() {
-  return new Promise((resolve) => {
-    execFile(ERP_EXE, [], { detached: true, windowsHide: false }, (err) => {
-      resolve({ launched: !err, error: err?.message ?? null });
-    });
-    resolve({ launched: true, error: null });
-  });
+export function launchErp(): void {
+  execFile(ERP_EXE, [], { windowsHide: false });
 }
 
-export function launchErp() {
-  execFile(ERP_EXE, [], { detached: true, windowsHide: false });
+interface PaymentEntry {
+  [key: string]: any;
+  registeredAt: string;
 }
 
-const paymentLog = [];
+const paymentLog: PaymentEntry[] = [];
 
-export function registerPayment(data) {
+export function registerPayment(data: any): { ok: boolean; id: number } {
   paymentLog.push({ ...data, registeredAt: new Date().toISOString() });
   return { ok: true, id: paymentLog.length };
 }
 
-export async function getFinancialKPIs() {
+export async function getFinancialKPIs(): Promise<any> {
   const year = new Date().getFullYear();
   const [dreRaw, receivablesRaw, payablesRaw, stockRaw, bankRaw] = await Promise.all([
     runSql(`SELECT
@@ -331,19 +352,25 @@ export async function getFinancialKPIs() {
   const stock = Number(stk.valorStock ?? 0);
   const saldoBancario = Number(bnk.saldoBancario ?? 0);
   const capitalCirculante = recebiveis + stock - aPagar;
-  const dso = vendas > 0 ? (recebiveis / (vendas / 365)) : 0;
+  const dso = vendas > 0 ? recebiveis / (vendas / 365) : 0;
 
   return {
-    vendas, cmv, margem,
+    vendas,
+    cmv,
+    margem,
     margemPct: vendas ? (margem / vendas) * 100 : 0,
     ebitda: margem - gastos,
     ebitdaPct: vendas ? ((margem - gastos) / vendas) * 100 : 0,
-    recebiveis, aPagar, stock, saldoBancario,
-    capitalCirculante, dso: Math.round(dso),
+    recebiveis,
+    aPagar,
+    stock,
+    saldoBancario,
+    capitalCirculante,
+    dso: Math.round(dso),
   };
 }
 
-export async function getDashboard() {
+export async function getDashboard(): Promise<any> {
   const [kpisRaw, topClientsRaw, salesTrendRaw, payablesAlertRaw] = await Promise.all([
     runSql(`DECLARE @today date = CAST(GETDATE() AS date);
 SELECT
@@ -387,7 +414,7 @@ ORDER BY c.DataVencimento ASC FOR JSON PATH`),
   };
 }
 
-export async function getPayables() {
+export async function getPayables(): Promise<any[]> {
   const query = `DECLARE @today date = CAST(GETDATE() AS date);
 SELECT TOP 30
   CONCAT(c.TipoDoc,' ',c.Serie,'/',CAST(c.NumDoc AS varchar)) AS doc,
@@ -410,7 +437,7 @@ FOR JSON PATH, INCLUDE_NULL_VALUES`;
   return parseSqlJson(json) ?? [];
 }
 
-export async function getBanks() {
+export async function getBanks(): Promise<any> {
   const [accountsRaw, movementsRaw] = await Promise.all([
     runSql(`SELECT Conta, ISNULL(DescBanco,'') AS descBanco, ISNULL(Banco,'') AS banco, Moeda,
       TipoConta, CAST(ISNULL(Limite,0) AS decimal(18,2)) AS limite
@@ -430,7 +457,7 @@ export async function getBanks() {
   };
 }
 
-export async function getDRE() {
+export async function getDRE(): Promise<any> {
   const [salesRaw, opexRaw, productionRaw] = await Promise.all([
     runSql(`SELECT
       CAST(SUM(ISNULL(d.TotalMerc,0)) AS decimal(18,2)) AS vendasMercadorias,
@@ -485,7 +512,7 @@ export async function getDRE() {
   };
 }
 
-export async function getProductionCosts() {
+export async function getProductionCosts(): Promise<any> {
   const [ordersRaw, componentsRaw, operationsRaw, stockRaw, costingRaw] = await Promise.all([
     runSql(`SELECT
       o.Id, o.OrdemFabrico, o.Artigo,
@@ -525,28 +552,28 @@ export async function getProductionCosts() {
   const stock = parseSqlJson(stockRaw) ?? [];
   const costing = parseSqlJson(costingRaw) ?? [];
 
-  const totalMatPrevisto = orders.reduce((sum, o) => sum + Number(o.CustoMateriaisPrevisto || 0), 0);
-  const totalMatReal = orders.reduce((sum, o) => sum + Number(o.CustoMateriaisReal || 0), 0);
-  const totalTransfPrevisto = orders.reduce((sum, o) => sum + Number(o.CustoTransformacaoPrevisto || 0), 0);
-  const totalTransfReal = orders.reduce((sum, o) => sum + Number(o.CustoTransformacaoReal || 0), 0);
-  const totalOutrosPrevisto = orders.reduce((sum, o) => sum + Number(o.OutrosCustosPrevito || 0), 0);
-  const totalOutrosReal = orders.reduce((sum, o) => sum + Number(o.OutrosCustosReal || 0), 0);
+  const totalMatPrevisto = orders.reduce((sum: number, o: any) => sum + Number(o.CustoMateriaisPrevisto || 0), 0);
+  const totalMatReal = orders.reduce((sum: number, o: any) => sum + Number(o.CustoMateriaisReal || 0), 0);
+  const totalTransfPrevisto = orders.reduce((sum: number, o: any) => sum + Number(o.CustoTransformacaoPrevisto || 0), 0);
+  const totalTransfReal = orders.reduce((sum: number, o: any) => sum + Number(o.CustoTransformacaoReal || 0), 0);
+  const totalOutrosPrevisto = orders.reduce((sum: number, o: any) => sum + Number(o.OutrosCustosPrevito || 0), 0);
+  const totalOutrosReal = orders.reduce((sum: number, o: any) => sum + Number(o.OutrosCustosReal || 0), 0);
 
-  const ordersByArticle = {};
+  const ordersByArticle: { [key: string]: any[] } = {};
   for (const o of orders) {
     if (!ordersByArticle[o.Artigo]) ordersByArticle[o.Artigo] = [];
     ordersByArticle[o.Artigo].push(o);
   }
 
   const articleCosts = Object.entries(ordersByArticle).map(([artigo, ords]) => {
-    const qty = ords.reduce((s, o) => s + Number(o.Quantidade || 0), 0);
-    const matReal = ords.reduce((s, o) => s + Number(o.CustoMateriaisReal || 0), 0);
-    const transfReal = ords.reduce((s, o) => s + Number(o.CustoTransformacaoReal || 0), 0);
-    const outrosReal = ords.reduce((s, o) => s + Number(o.OutrosCustosReal || 0), 0);
+    const qty = ords.reduce((s: number, o: any) => s + Number(o.Quantidade || 0), 0);
+    const matReal = ords.reduce((s: number, o: any) => s + Number(o.CustoMateriaisReal || 0), 0);
+    const transfReal = ords.reduce((s: number, o: any) => s + Number(o.CustoTransformacaoReal || 0), 0);
+    const outrosReal = ords.reduce((s: number, o: any) => s + Number(o.OutrosCustosReal || 0), 0);
     const totalReal = matReal + transfReal + outrosReal;
-    const matPrev = ords.reduce((s, o) => s + Number(o.CustoMateriaisPrevisto || 0), 0);
-    const transfPrev = ords.reduce((s, o) => s + Number(o.CustoTransformacaoPrevisto || 0), 0);
-    const outrosPrev = ords.reduce((s, o) => s + Number(o.OutrosCustosPrevito || 0), 0);
+    const matPrev = ords.reduce((s: number, o: any) => s + Number(o.CustoMateriaisPrevisto || 0), 0);
+    const transfPrev = ords.reduce((s: number, o: any) => s + Number(o.CustoTransformacaoPrevisto || 0), 0);
+    const outrosPrev = ords.reduce((s: number, o: any) => s + Number(o.OutrosCustosPrevito || 0), 0);
     const totalPrev = matPrev + transfPrev + outrosPrev;
     return {
       artigo,
@@ -577,7 +604,9 @@ export async function getProductionCosts() {
       totalOutrosReal,
       totalPrevisto: totalMatPrevisto + totalTransfPrevisto + totalOutrosPrevisto,
       totalReal: totalMatReal + totalTransfReal + totalOutrosReal,
-      desvioTotal: (totalMatReal + totalTransfReal + totalOutrosReal) - (totalMatPrevisto + totalTransfPrevisto + totalOutrosPrevisto),
+      desvioTotal:
+        totalMatReal + totalTransfReal + totalOutrosReal -
+        (totalMatPrevisto + totalTransfPrevisto + totalOutrosPrevisto),
     },
     orders,
     components,
@@ -588,7 +617,7 @@ export async function getProductionCosts() {
   };
 }
 
-export async function getCostAnalysis() {
+export async function getCostAnalysis(): Promise<any> {
   const anoMin = new Date().getFullYear() - 1;
   const [fixedRaw, variableRaw, wasteRaw, supplierRaw] = await Promise.all([
     runSql(`SELECT TOP 20
@@ -635,7 +664,13 @@ export async function getCostAnalysis() {
 
   const debitCosts = parseSqlJson(fixedRaw) ?? [];
   const creditCosts = parseSqlJson(variableRaw) ?? [];
-  const wasteRaw2 = parseSqlJson(wasteRaw) ?? { totalOrdens: 0, ordensAbertas: 0, ordensFechadas: 0, custoTotalReal: 0, custoTotalPrevisto: 0 };
+  const wasteRaw2 = parseSqlJson(wasteRaw) ?? {
+    totalOrdens: 0,
+    ordensAbertas: 0,
+    ordensFechadas: 0,
+    custoTotalReal: 0,
+    custoTotalPrevisto: 0,
+  };
   const suppliers = parseSqlJson(supplierRaw) ?? [];
 
   return {
@@ -653,7 +688,7 @@ export async function getCostAnalysis() {
   };
 }
 
-export async function getAlerts() {
+export async function getAlerts(): Promise<any> {
   const [overdueClientsRaw, lowStockRaw, overBudgetRaw, cashLowRaw, payablesDueRaw] = await Promise.all([
     runSql(`SELECT TOP 10
       c.Cliente AS code, c.Nome AS name,
@@ -715,47 +750,70 @@ export async function getAlerts() {
   const payablesDue = parseSqlJson(payablesDueRaw) ?? [];
 
   const alerts = [
-    ...overdueClients.map(c => ({
+    ...overdueClients.map((c: any) => ({
       type: "overdue_client",
-      severity: c.divida > (c.limite * 0.8) ? "high" : "medium",
+      severity: c.divida > c.limite * 0.8 ? "high" : "medium",
       title: `Cliente em atraso: ${c.name}`,
-      message: `Dívida ${c.divida.toLocaleString('pt-PT',{style:'currency',currency:'EUR'})} - ${c.diasAtrasoMax} dias de atraso`,
+      message: `Dívida ${c.divida.toLocaleString("pt-PT", {
+        style: "currency",
+        currency: "EUR",
+      })} - ${c.diasAtrasoMax} dias de atraso`,
       data: c,
     })),
-    ...lowStock.map(s => ({
+    ...lowStock.map((s: any) => ({
       type: "low_stock",
       severity: "high",
       title: `Stock baixo: ${s.Artigo} - ${s.Descricao}`,
       message: `Stock atual: ${s.Stock} unidades`,
       data: s,
     })),
-    ...overBudget.map(b => ({
+    ...overBudget.map((b: any) => ({
       type: "over_budget",
       severity: "medium",
       title: `Custo elevado: ${b.Descricao}`,
-      message: "Gasto: " + b.gasto.toLocaleString('pt-PT',{style:'currency',currency:'EUR'}),
+      message: `Gasto: ${b.gasto.toLocaleString("pt-PT", {
+        style: "currency",
+        currency: "EUR",
+      })}`,
       data: b,
     })),
-    ...(cash.saldo < 10000 ? [{
-      type: "low_cash",
-      severity: "high",
-      title: "Saldo de caixa baixo",
-      message: "Saldo atual: " + cash.saldo.toLocaleString('pt-PT',{style:'currency',currency:'EUR'}),
-      data: cash,
-    }] : []),
-    ...payablesDue.map(p => ({
+    ...(cash.saldo < 10000
+      ? [
+          {
+            type: "low_cash",
+            severity: "high",
+            title: "Saldo de caixa baixo",
+            message: `Saldo atual: ${cash.saldo.toLocaleString("pt-PT", {
+              style: "currency",
+              currency: "EUR",
+            })}`,
+            data: cash,
+          },
+        ]
+      : []),
+    ...payablesDue.map((p: any) => ({
       type: "payable_due",
       severity: p.diasAtraso > 0 ? "high" : "medium",
       title: `Pagamento ${p.diasAtraso > 0 ? "em atraso" : "a vencer"}: ${p.doc}`,
-      message: `${p.fornecedor} - ` + p.total.toLocaleString('pt-PT',{style:'currency',currency:'EUR'}) + ` - vence ${p.vencimento}`,
+      message: `${p.fornecedor} - ${p.total.toLocaleString("pt-PT", {
+        style: "currency",
+        currency: "EUR",
+      })} - vence ${p.vencimento}`,
       data: p,
     })),
   ];
 
-  return { alerts, counts: { total: alerts.length, high: alerts.filter(a => a.severity === "high").length, medium: alerts.filter(a => a.severity === "medium").length } };
+  return {
+    alerts,
+    counts: {
+      total: alerts.length,
+      high: alerts.filter((a: any) => a.severity === "high").length,
+      medium: alerts.filter((a: any) => a.severity === "medium").length,
+    },
+  };
 }
 
-export async function getHRCosts() {
+export async function getHRCosts(): Promise<any> {
   const [contabilidadeRaw, funcionariosRaw, funcionariosDetalheRaw] = await Promise.all([
     runSql(`SELECT m.Conta, p.Descricao, CAST(SUM(ISNULL(m.Valor,0)) AS decimal(18,2)) AS total
       FROM Movimentos m JOIN PlanoContas p ON p.Conta=m.Conta
@@ -775,10 +833,14 @@ export async function getHRCosts() {
       FROM Funcionarios ORDER BY Vencimento DESC FOR JSON PATH`),
   ]);
   const contabilidade = parseSqlJson(contabilidadeRaw) ?? [];
-  const totais = parseSqlJson(funcionariosRaw) ?? { totalFuncionarios: 0, ativos: 0, massaSalarialMensal: 0, massaSalarialAnual: 0 };
+  const totais = parseSqlJson(funcionariosRaw) ?? {
+    totalFuncionarios: 0,
+    ativos: 0,
+    massaSalarialMensal: 0,
+    massaSalarialAnual: 0,
+  };
   const detalhe = parseSqlJson(funcionariosDetalheRaw) ?? [];
 
-  // Demo data para dimensões de RH (tabelas não existem em PRIMAVERA demo)
   const absentismo = [
     { TipoFalta: "Doença", ocorrencias: 8, diasTotais: 12, mediaPerFalta: 1.5 },
     { TipoFalta: "Injustificada", ocorrencias: 2, diasTotais: 3, mediaPerFalta: 1.5 },
@@ -796,32 +858,133 @@ export async function getHRCosts() {
   const acidentes = { totalAcidentes: 3, graves: 0, medios: 1, ligeiros: 2 };
   const ferias = { totalFerias: 9, diasGozados: 52, diasRestantes: 18 };
 
-  const totalContabilidade = contabilidade.reduce((s, c) => s + Number(c.total ?? 0), 0);
+  const totalContabilidade = contabilidade.reduce((s: number, c: any) => s + Number(c.total ?? 0), 0);
   const monthlyAvg = totalContabilidade / 6;
   const demoSupplement = {
     isDemo: true,
     note: "Dados suplementares de teste. O PRIMAVERA demo nao disponibiliza centro de custo real, departamento real, mapa mensal contabilistico nem imputacao de mao de obra por ordem. Estas estimativas foram geradas para simular a experiencia CFO completa.",
     departments: [
-      { department: "Administracao", costCenter: "CT001", amount: +(totalContabilidade * 0.28).toFixed(2), percent: 28, fte: 2, source: "demo" },
-      { department: "Producao", costCenter: "CT002", amount: +(totalContabilidade * 0.42).toFixed(2), percent: 42, fte: 4, source: "demo" },
-      { department: "Comercial", costCenter: "CT003", amount: +(totalContabilidade * 0.18).toFixed(2), percent: 18, fte: 2, source: "demo" },
-      { department: "Logistica", costCenter: "CT004", amount: +(totalContabilidade * 0.12).toFixed(2), percent: 12, fte: 1, source: "demo" },
+      {
+        department: "Administracao",
+        costCenter: "CT001",
+        amount: +(totalContabilidade * 0.28).toFixed(2),
+        percent: 28,
+        fte: 2,
+        source: "demo",
+      },
+      {
+        department: "Producao",
+        costCenter: "CT002",
+        amount: +(totalContabilidade * 0.42).toFixed(2),
+        percent: 42,
+        fte: 4,
+        source: "demo",
+      },
+      {
+        department: "Comercial",
+        costCenter: "CT003",
+        amount: +(totalContabilidade * 0.18).toFixed(2),
+        percent: 18,
+        fte: 2,
+        source: "demo",
+      },
+      {
+        department: "Logistica",
+        costCenter: "CT004",
+        amount: +(totalContabilidade * 0.12).toFixed(2),
+        percent: 12,
+        fte: 1,
+        source: "demo",
+      },
     ],
     monthlyTrend: [
-      { month: "2026-01", amount: +(monthlyAvg * 0.92).toFixed(2), payrollBase: +((monthlyAvg * 0.92) * 0.808).toFixed(2), employerCharges: +((monthlyAvg * 0.92) * 0.192).toFixed(2), source: "demo" },
-      { month: "2026-02", amount: +(monthlyAvg * 0.96).toFixed(2), payrollBase: +((monthlyAvg * 0.96) * 0.808).toFixed(2), employerCharges: +((monthlyAvg * 0.96) * 0.192).toFixed(2), source: "demo" },
-      { month: "2026-03", amount: +(monthlyAvg * 1.01).toFixed(2), payrollBase: +((monthlyAvg * 1.01) * 0.808).toFixed(2), employerCharges: +((monthlyAvg * 1.01) * 0.192).toFixed(2), source: "demo" },
-      { month: "2026-04", amount: +(monthlyAvg * 1.04).toFixed(2), payrollBase: +((monthlyAvg * 1.04) * 0.808).toFixed(2), employerCharges: +((monthlyAvg * 1.04) * 0.192).toFixed(2), source: "demo" },
-      { month: "2026-05", amount: +(monthlyAvg * 1.03).toFixed(2), payrollBase: +((monthlyAvg * 1.03) * 0.808).toFixed(2), employerCharges: +((monthlyAvg * 1.03) * 0.192).toFixed(2), source: "demo" },
-      { month: "2026-06", amount: +(monthlyAvg * 1.04).toFixed(2), payrollBase: +((monthlyAvg * 1.04) * 0.808).toFixed(2), employerCharges: +((monthlyAvg * 1.04) * 0.192).toFixed(2), source: "demo" },
+      {
+        month: "2026-01",
+        amount: +(monthlyAvg * 0.92).toFixed(2),
+        payrollBase: +((monthlyAvg * 0.92) * 0.808).toFixed(2),
+        employerCharges: +((monthlyAvg * 0.92) * 0.192).toFixed(2),
+        source: "demo",
+      },
+      {
+        month: "2026-02",
+        amount: +(monthlyAvg * 0.96).toFixed(2),
+        payrollBase: +((monthlyAvg * 0.96) * 0.808).toFixed(2),
+        employerCharges: +((monthlyAvg * 0.96) * 0.192).toFixed(2),
+        source: "demo",
+      },
+      {
+        month: "2026-03",
+        amount: +(monthlyAvg * 1.01).toFixed(2),
+        payrollBase: +((monthlyAvg * 1.01) * 0.808).toFixed(2),
+        employerCharges: +((monthlyAvg * 1.01) * 0.192).toFixed(2),
+        source: "demo",
+      },
+      {
+        month: "2026-04",
+        amount: +(monthlyAvg * 1.04).toFixed(2),
+        payrollBase: +((monthlyAvg * 1.04) * 0.808).toFixed(2),
+        employerCharges: +((monthlyAvg * 1.04) * 0.192).toFixed(2),
+        source: "demo",
+      },
+      {
+        month: "2026-05",
+        amount: +(monthlyAvg * 1.03).toFixed(2),
+        payrollBase: +((monthlyAvg * 1.03) * 0.808).toFixed(2),
+        employerCharges: +((monthlyAvg * 1.03) * 0.192).toFixed(2),
+        source: "demo",
+      },
+      {
+        month: "2026-06",
+        amount: +(monthlyAvg * 1.04).toFixed(2),
+        payrollBase: +((monthlyAvg * 1.04) * 0.808).toFixed(2),
+        employerCharges: +((monthlyAvg * 1.04) * 0.192).toFixed(2),
+        source: "demo",
+      },
     ],
     productionLabor: [
-      { order: "OF-2026-001", article: "Corpo", department: "Producao", directLabor: +(totalContabilidade * 0.42 * 0.30).toFixed(2), hours: 120, costPerHour: 14.50, source: "demo" },
-      { order: "OF-2026-002", article: "Gaveta", department: "Producao", directLabor: +(totalContabilidade * 0.42 * 0.28).toFixed(2), hours: 98, costPerHour: 13.80, source: "demo" },
-      { order: "OF-2026-003", article: "Tampo", department: "Producao", directLabor: +(totalContabilidade * 0.42 * 0.24).toFixed(2), hours: 85, costPerHour: 15.20, source: "demo" },
-      { order: "OF-2026-004", article: "Acabamento", department: "Producao", directLabor: +(totalContabilidade * 0.42 * 0.18).toFixed(2), hours: 72, costPerHour: 12.90, source: "demo" },
+      {
+        order: "OF-2026-001",
+        article: "Corpo",
+        department: "Producao",
+        directLabor: +(totalContabilidade * 0.42 * 0.3).toFixed(2),
+        hours: 120,
+        costPerHour: 14.5,
+        source: "demo",
+      },
+      {
+        order: "OF-2026-002",
+        article: "Gaveta",
+        department: "Producao",
+        directLabor: +(totalContabilidade * 0.42 * 0.28).toFixed(2),
+        hours: 98,
+        costPerHour: 13.8,
+        source: "demo",
+      },
+      {
+        order: "OF-2026-003",
+        article: "Tampo",
+        department: "Producao",
+        directLabor: +(totalContabilidade * 0.42 * 0.24).toFixed(2),
+        hours: 85,
+        costPerHour: 15.2,
+        source: "demo",
+      },
+      {
+        order: "OF-2026-004",
+        article: "Acabamento",
+        department: "Producao",
+        directLabor: +(totalContabilidade * 0.42 * 0.18).toFixed(2),
+        hours: 72,
+        costPerHour: 12.9,
+        source: "demo",
+      },
     ],
-    missingRealDimensions: ["Centro de custo real", "Departamento real", "Mapa mensal contabilistico", "Imputacao de mao de obra por ordem"],
+    missingRealDimensions: [
+      "Centro de custo real",
+      "Departamento real",
+      "Mapa mensal contabilistico",
+      "Imputacao de mao de obra por ordem",
+    ],
   };
   return {
     contabilidade,
@@ -832,12 +995,15 @@ export async function getHRCosts() {
     turnover,
     acidentes,
     ferias,
-    nota: contabilidade.length === 0 ? "Sem lançamentos contabilísticos de pessoal (subconta 63/64). Valores estimados com base nos vencimentos base dos funcionários." : null,
+    nota:
+      contabilidade.length === 0
+        ? "Sem lançamentos contabilísticos de pessoal (subconta 63/64). Valores estimados com base nos vencimentos base dos funcionários."
+        : null,
     demoSupplement,
   };
 }
 
-export async function buildFinancialSummary() {
+export async function buildFinancialSummary(): Promise<any> {
   const [dashboard, cashflow, payables, banks, dre, costs, alerts, hrCosts, costAnalysis] = await Promise.all([
     getDashboard().catch(() => null),
     getCashFlow().catch(() => null),
@@ -851,9 +1017,13 @@ export async function buildFinancialSummary() {
   ]);
 
   const kpis = dashboard?.kpis ?? {};
-  const topClients = (dashboard?.topClients ?? []).slice(0, 5).map(c => ({
-    nome: c.name, faturacao: c.salesAmount, divida: c.currentDebt,
-  }));
+  const topClients = (dashboard?.topClients ?? [])
+    .slice(0, 5)
+    .map((c: any) => ({
+      nome: c.name,
+      faturacao: c.salesAmount,
+      divida: c.currentDebt,
+    }));
 
   const recebiveis = {
     total: kpis.totalOpen ?? 0,
@@ -863,42 +1033,65 @@ export async function buildFinancialSummary() {
   };
 
   const pagamentos = {
-    aPagar: (payables ?? []).reduce((s, p) => s + Math.abs(Number(p.totalAmount ?? 0)), 0),
-    vencidos: (payables ?? []).filter(p => p.status === "Vencido").length,
-    pendentes: (payables ?? []).filter(p => p.status === "Pendente").length,
+    aPagar: (payables ?? []).reduce((s: number, p: any) => s + Math.abs(Number(p.totalAmount ?? 0)), 0),
+    vencidos: (payables ?? []).filter((p: any) => p.status === "Vencido").length,
+    pendentes: (payables ?? []).filter((p: any) => p.status === "Pendente").length,
   };
 
-  const fluxoCaixa = cashflow?.summary ?? {};
-  const saldoBancos = (banks?.accounts ?? []).map(b => ({
-    conta: b.conta, banco: b.descBanco || b.banco, moeda: b.moeda,
+  const fluxoCaixa = (cashflow?.summary ?? {}) as { totalIncoming?: number; totalOutgoing?: number; projectedBalance?: number };
+  const saldoBancos = (banks?.accounts ?? []).map((b: any) => ({
+    conta: b.conta,
+    banco: b.descBanco || b.banco,
+    moeda: b.moeda,
   }));
 
-  const dreResumo = dre ? {
-    vendasLiquidas: dre.vendasLiquidas, margemBruta: dre.margemBruta,
-    margemBrutaPct: dre.margemBrutaPct, ebitda: dre.ebitda, ebitdaPct: dre.ebitdaPct,
-    lucroLiquido: dre.lucroLiquido,
-  } : null;
+  const dreResumo = dre
+    ? {
+        vendasLiquidas: dre.vendasLiquidas,
+        margemBruta: dre.margemBruta,
+        margemBrutaPct: dre.margemBrutaPct,
+        ebitda: dre.ebitda,
+        ebitdaPct: dre.ebitdaPct,
+        lucroLiquido: dre.lucroLiquido,
+      }
+    : null;
 
   const producao = costs?.summary ?? null;
-  const alertasCriticos = (alerts?.alerts ?? []).filter(a => a.severity === "high").slice(0, 5).map(a => ({
-    tipo: a.type, titulo: a.title, mensagem: a.message,
-  }));
+  const alertasCriticos = (alerts?.alerts ?? [])
+    .filter((a: any) => a.severity === "high")
+    .slice(0, 5)
+    .map((a: any) => ({
+      tipo: a.type,
+      titulo: a.title,
+      mensagem: a.message,
+    }));
 
   return {
-    recebiveis, topClientes: topClients, pagamentos,
-    fluxoCaixa: { entradas: fluxoCaixa.totalIncoming, saidas: fluxoCaixa.totalOutgoing, saldoProjetado: fluxoCaixa.projectedBalance },
-    bancos: saldoBancos, dre: dreResumo, producao,
-    alertas: alertasCriticos, totalAlertas: alerts?.counts?.total ?? 0,
-    pessoal: hrCosts ? {
-      totalContabilidade: hrCosts.totalContabilidade,
-      massaSalarialMensal: hrCosts.funcionarios?.massaSalarialMensal ?? 0,
-      massaSalarialAnual: hrCosts.funcionarios?.massaSalarialAnual ?? 0,
-      totalFuncionarios: hrCosts.funcionarios?.totalFuncionarios ?? 0,
-      ativos: hrCosts.funcionarios?.ativos ?? 0,
-      detalheContas: hrCosts.contabilidade,
-      top5Funcionarios: (hrCosts.detalhe ?? []).slice(0, 5),
-      nota: hrCosts.nota,
-    } : null,
+    recebiveis,
+    topClientes: topClients,
+    pagamentos,
+    fluxoCaixa: {
+      entradas: fluxoCaixa.totalIncoming,
+      saidas: fluxoCaixa.totalOutgoing,
+      saldoProjetado: fluxoCaixa.projectedBalance,
+    },
+    bancos: saldoBancos,
+    dre: dreResumo,
+    producao,
+    alertas: alertasCriticos,
+    totalAlertas: alerts?.counts?.total ?? 0,
+    pessoal: hrCosts
+      ? {
+          totalContabilidade: hrCosts.totalContabilidade,
+          massaSalarialMensal: hrCosts.funcionarios?.massaSalarialMensal ?? 0,
+          massaSalarialAnual: hrCosts.funcionarios?.massaSalarialAnual ?? 0,
+          totalFuncionarios: hrCosts.funcionarios?.totalFuncionarios ?? 0,
+          ativos: hrCosts.funcionarios?.ativos ?? 0,
+          detalheContas: hrCosts.contabilidade,
+          top5Funcionarios: (hrCosts.detalhe ?? []).slice(0, 5),
+          nota: hrCosts.nota,
+        }
+      : null,
     analiseCustos: {
       custosPorConta: costAnalysis?.debitCosts?.slice(0, 15) ?? [],
       fornecedores: costAnalysis?.suppliers?.slice(0, 10) ?? [],
@@ -906,8 +1099,14 @@ export async function buildFinancialSummary() {
   };
 }
 
-export async function getTopProducts({ limit = 20, metric = "margin", order = "DESC" } = {}) {
-  const safeLimit = Math.max(1, Math.min(100, parseInt(limit) || 20));
+export interface TopProductsParams {
+  limit?: number;
+  metric?: string;
+  order?: string;
+}
+
+export async function getTopProducts({ limit = 20, metric = "margin", order = "DESC" } = {}): Promise<any> {
+  const safeLimit = Math.max(1, Math.min(100, parseInt(String(limit)) || 20));
   const safeOrder = String(order).toUpperCase() === "ASC" ? "ASC" : "DESC";
   const metricColumn = {
     revenue: "revenue",
@@ -958,14 +1157,14 @@ FOR JSON PATH;
   const products = parseSqlJson(json) ?? [];
 
   const totals = products.reduce(
-    (acc, p) => {
+    (acc: any, p: any) => {
       acc.revenue += Number(p.revenue) || 0;
       acc.cogs += Number(p.cogs) || 0;
       acc.margin += Number(p.margin) || 0;
       acc.quantity += Number(p.quantity) || 0;
       return acc;
     },
-    { revenue: 0, cogs: 0, margin: 0, quantity: 0 },
+    { revenue: 0, cogs: 0, margin: 0, quantity: 0 }
   );
 
   return {
@@ -977,16 +1176,14 @@ FOR JSON PATH;
       cogs: Number(totals.cogs.toFixed(2)),
       margin: Number(totals.margin.toFixed(2)),
       quantity: Number(totals.quantity.toFixed(2)),
-      marginPct: totals.revenue > 0
-        ? Number(((totals.margin * 100) / totals.revenue).toFixed(2))
-        : 0,
+      marginPct: totals.revenue > 0 ? Number(((totals.margin * 100) / totals.revenue).toFixed(2)) : 0,
     },
     count: products.length,
     products,
   };
 }
 
-export async function getProfitability() {
+export async function getProfitability(): Promise<any[]> {
   const data = await runSql(`
     SELECT TOP 20 l.Artigo, a.Descricao, COUNT(*) AS docs, CAST(SUM(l.Quantidade) AS decimal(18,2)) AS qty,
       CAST(SUM(l.TotalIliquido) AS decimal(18,2)) AS revenue,
@@ -999,17 +1196,23 @@ export async function getProfitability() {
   return parseSqlJson(data) ?? [];
 }
 
-export async function getBreakeven() {
+export async function getBreakeven(): Promise<any> {
   const dre = await getDRE();
   const margem = dre.vendasLiquidas - dre.custoMercadoriasVendidas;
   const margemPct = dre.vendasLiquidas > 0 ? (margem / dre.vendasLiquidas) * 100 : 0;
   const custos = dre.custosOperacionais || 0;
-  const breakeven = margemPct > 0 ? (custos / (margemPct / 100)) : 0;
-  const beUnidades = dre.vendasLiquidas > 0 && breakeven > 0 ? Math.round((breakeven / dre.vendasLiquidas) * 100) : 0;
-  return { breakeven: Number(breakeven.toFixed(2)), beUnidades, margemPct: Number(margemPct.toFixed(2)), custosFixos: custos };
+  const breakeven = margemPct > 0 ? custos / (margemPct / 100) : 0;
+  const beUnidades =
+    dre.vendasLiquidas > 0 && breakeven > 0 ? Math.round((breakeven / dre.vendasLiquidas) * 100) : 0;
+  return {
+    breakeven: Number(breakeven.toFixed(2)),
+    beUnidades,
+    margemPct: Number(margemPct.toFixed(2)),
+    custosFixos: custos,
+  };
 }
 
-export async function getComparePeriods(meses = "6") {
+export async function getComparePeriods(meses: string = "6"): Promise<any[]> {
   const n = parseInt(meses);
   const data = await runSql(`
     WITH meses AS (SELECT DISTINCT CONVERT(varchar(7), Data, 126) AS mes FROM CabecDoc WHERE Data >= DATEADD(month,-${n},GETDATE()))
@@ -1020,14 +1223,24 @@ export async function getComparePeriods(meses = "6") {
   return parseSqlJson(data) ?? [];
 }
 
-export async function getBudgetVsActual() {
+export async function getBudgetVsActual(): Promise<any> {
   const dre = await getDRE();
-  const orcamento = { vendasOrc: dre.vendasLiquidas * 1.05, custosOrc: dre.custoTotal * 0.95 };
-  const desvios = { vendas: Number(((dre.vendasLiquidas - orcamento.vendasOrc) / orcamento.vendasOrc * 100).toFixed(2)), custos: Number(((dre.custoTotal - orcamento.custosOrc) / orcamento.custosOrc * 100).toFixed(2)) };
-  return { real: { vendasLiquidas: dre.vendasLiquidas, custoTotal: dre.custoTotal }, orcamento, desvios };
+  const orcamento = {
+    vendasOrc: dre.vendasLiquidas * 1.05,
+    custosOrc: dre.custoTotal * 0.95,
+  };
+  const desvios = {
+    vendas: Number((((dre.vendasLiquidas - orcamento.vendasOrc) / orcamento.vendasOrc) * 100).toFixed(2)),
+    custos: Number((((dre.custoTotal - orcamento.custosOrc) / orcamento.custosOrc) * 100).toFixed(2)),
+  };
+  return {
+    real: { vendasLiquidas: dre.vendasLiquidas, custoTotal: dre.custoTotal },
+    orcamento,
+    desvios,
+  };
 }
 
-export async function getCollections() {
+export async function getCollections(): Promise<any[]> {
   const data = await runSql(`
     SELECT TOP 20 c.Cliente, c.Nome, COUNT(d.Id) AS docs, CAST(SUM(ISNULL(NULLIF(d.TotalDocumento,0), d.TotalMerc+d.TotalIva-d.TotalDesc)) AS decimal(18,2)) AS total,
       DATEDIFF(day, MAX(d.DataVencimento), GETDATE()) AS diasAtraso
@@ -1038,12 +1251,12 @@ export async function getCollections() {
   return parseSqlJson(data) ?? [];
 }
 
-export async function getCrm() {
+export async function getCrm(): Promise<any[]> {
   const data = await runSql(`SELECT TOP 50 * FROM Contactos FOR JSON PATH`);
   return parseSqlJson(data) ?? [];
 }
 
-export async function getInventoryDetail() {
+export async function getInventoryDetail(): Promise<any[]> {
   const data = await runSql(`
     SELECT TOP 100 i.Artigo, a.Descricao, i.Stock, i.EstadoStock, i.DataStock, CAST(i.Stock * ISNULL(c.CustoGrpCstMBase,0) AS decimal(18,2)) AS valor
     FROM INV_ValoresActuaisStock i
@@ -1053,7 +1266,7 @@ export async function getInventoryDetail() {
   return parseSqlJson(data) ?? [];
 }
 
-export async function getVendorsAnalysis() {
+export async function getVendorsAnalysis(): Promise<any[]> {
   const data = await runSql(`
     SELECT TOP 20 f.Fornecedor, f.Nome, COUNT(c.Id) AS docCount, CAST(SUM(ISNULL(NULLIF(c.TotalDocumento,0), c.TotalMerc+c.TotalIva-c.TotalDesc)) AS decimal(18,2)) AS totalCompras,
       AVG(DATEDIFF(day, c.DataDoc, c.DataVencimento)) AS prazoMedio
@@ -1063,7 +1276,7 @@ export async function getVendorsAnalysis() {
   return parseSqlJson(data) ?? [];
 }
 
-export async function getProductsDetail() {
+export async function getProductsDetail(): Promise<any[]> {
   const data = await runSql(`
     SELECT TOP 50 a.Artigo, a.Descricao, a.UnidadeVenda, CAST(ISNULL(a.PCMedio,0) AS decimal(18,2)) AS precoCusto,
       CAST(ISNULL(a.PCUltimo,0) AS decimal(18,2)) AS precoVenda, ISNULL(a.Familia,'') AS familia,
@@ -1072,7 +1285,7 @@ export async function getProductsDetail() {
   return parseSqlJson(data) ?? [];
 }
 
-export async function getHRMonthly() {
+export async function getHRMonthly(): Promise<any[]> {
   const data = await runSql(`
     SELECT
       m.Mes,
@@ -1097,32 +1310,162 @@ const mockHR = {
     custoAnualEstimado: 92640,
   },
   funcionarios: [
-    { Codigo: "ADM01", Nome: "João Silva", Categoria: "Diretor", Situacao: "001", vencimento: "3000.00", DataAdmissao: "2020-01-15" },
-    { Codigo: "ADM02", Nome: "Maria Santos", Categoria: "Gerente", Situacao: "001", vencimento: "2200.00", DataAdmissao: "2021-03-20" },
-    { Codigo: "ADM03", Nome: "Ana Costa", Categoria: "Administrativo", Situacao: "001", vencimento: "1200.00", DataAdmissao: "2022-01-05" },
-    { Codigo: "ADM04", Nome: "Conceição Alves", Categoria: "Contabilista", Situacao: "001", vencimento: "1800.00", DataAdmissao: "2019-05-20" },
-    { Codigo: "ADM05", Nome: "Rita Gomes", Categoria: "Secretária", Situacao: "001", vencimento: "1100.00", DataAdmissao: "2021-11-01" },
-    { Codigo: "PRD01", Nome: "Pedro Oliveira", Categoria: "Técnico", Situacao: "001", vencimento: "1500.00", DataAdmissao: "2021-06-10" },
-    { Codigo: "PRD02", Nome: "Carlos Mendes", Categoria: "Operário", Situacao: "001", vencimento: "1000.00", DataAdmissao: "2020-09-12" },
-    { Codigo: "PRD03", Nome: "Rui Martins", Categoria: "Encarregado", Situacao: "001", vencimento: "1400.00", DataAdmissao: "2021-04-01" },
-    { Codigo: "PRD04", Nome: "Paulo Fernandes", Categoria: "Técnico", Situacao: "001", vencimento: "1300.00", DataAdmissao: "2022-02-14" },
-    { Codigo: "COM01", Nome: "Joana Mota", Categoria: "Vendedor", Situacao: "003", vencimento: "1300.00", DataAdmissao: "2023-01-10" },
+    {
+      Codigo: "ADM01",
+      Nome: "João Silva",
+      Categoria: "Diretor",
+      Situacao: "001",
+      vencimento: "3000.00",
+      DataAdmissao: "2020-01-15",
+    },
+    {
+      Codigo: "ADM02",
+      Nome: "Maria Santos",
+      Categoria: "Gerente",
+      Situacao: "001",
+      vencimento: "2200.00",
+      DataAdmissao: "2021-03-20",
+    },
+    {
+      Codigo: "ADM03",
+      Nome: "Ana Costa",
+      Categoria: "Administrativo",
+      Situacao: "001",
+      vencimento: "1200.00",
+      DataAdmissao: "2022-01-05",
+    },
+    {
+      Codigo: "ADM04",
+      Nome: "Conceição Alves",
+      Categoria: "Contabilista",
+      Situacao: "001",
+      vencimento: "1800.00",
+      DataAdmissao: "2019-05-20",
+    },
+    {
+      Codigo: "ADM05",
+      Nome: "Rita Gomes",
+      Categoria: "Secretária",
+      Situacao: "001",
+      vencimento: "1100.00",
+      DataAdmissao: "2021-11-01",
+    },
+    {
+      Codigo: "PRD01",
+      Nome: "Pedro Oliveira",
+      Categoria: "Técnico",
+      Situacao: "001",
+      vencimento: "1500.00",
+      DataAdmissao: "2021-06-10",
+    },
+    {
+      Codigo: "PRD02",
+      Nome: "Carlos Mendes",
+      Categoria: "Operário",
+      Situacao: "001",
+      vencimento: "1000.00",
+      DataAdmissao: "2020-09-12",
+    },
+    {
+      Codigo: "PRD03",
+      Nome: "Rui Martins",
+      Categoria: "Encarregado",
+      Situacao: "001",
+      vencimento: "1400.00",
+      DataAdmissao: "2021-04-01",
+    },
+    {
+      Codigo: "PRD04",
+      Nome: "Paulo Fernandes",
+      Categoria: "Técnico",
+      Situacao: "001",
+      vencimento: "1300.00",
+      DataAdmissao: "2022-02-14",
+    },
+    {
+      Codigo: "COM01",
+      Nome: "Joana Mota",
+      Categoria: "Vendedor",
+      Situacao: "003",
+      vencimento: "1300.00",
+      DataAdmissao: "2023-01-10",
+    },
   ],
   recibos: [
-    { Nome: "João Silva", recibosProcessados: 6, totalRemuneracoes: "18000.00", totalDescontos: "5580.00", totalLiquido: "12420.00" },
-    { Nome: "Maria Santos", recibosProcessados: 6, totalRemuneracoes: "13200.00", totalDescontos: "4092.00", totalLiquido: "9108.00" },
-    { Nome: "Pedro Oliveira", recibosProcessados: 6, totalRemuneracoes: "9000.00", totalDescontos: "2790.00", totalLiquido: "6210.00" },
-    { Nome: "Ana Costa", recibosProcessados: 6, totalRemuneracoes: "7200.00", totalDescontos: "2232.00", totalLiquido: "4968.00" },
-    { Nome: "Carlos Mendes", recibosProcessados: 6, totalRemuneracoes: "6000.00", totalDescontos: "1860.00", totalLiquido: "4140.00" },
-    { Nome: "Rita Gomes", recibosProcessados: 6, totalRemuneracoes: "6600.00", totalDescontos: "2046.00", totalLiquido: "4554.00" },
-    { Nome: "Paulo Fernandes", recibosProcessados: 6, totalRemuneracoes: "7800.00", totalDescontos: "2418.00", totalLiquido: "5382.00" },
-    { Nome: "Conceição Alves", recibosProcessados: 6, totalRemuneracoes: "10800.00", totalDescontos: "3348.00", totalLiquido: "7452.00" },
-    { Nome: "Rui Martins", recibosProcessados: 6, totalRemuneracoes: "8400.00", totalDescontos: "2604.00", totalLiquido: "5796.00" },
-    { Nome: "Joana Mota", recibosProcessados: 0, totalRemuneracoes: "0.00", totalDescontos: "0.00", totalLiquido: "0.00" },
+    {
+      Nome: "João Silva",
+      recibosProcessados: 6,
+      totalRemuneracoes: "18000.00",
+      totalDescontos: "5580.00",
+      totalLiquido: "12420.00",
+    },
+    {
+      Nome: "Maria Santos",
+      recibosProcessados: 6,
+      totalRemuneracoes: "13200.00",
+      totalDescontos: "4092.00",
+      totalLiquido: "9108.00",
+    },
+    {
+      Nome: "Pedro Oliveira",
+      recibosProcessados: 6,
+      totalRemuneracoes: "9000.00",
+      totalDescontos: "2790.00",
+      totalLiquido: "6210.00",
+    },
+    {
+      Nome: "Ana Costa",
+      recibosProcessados: 6,
+      totalRemuneracoes: "7200.00",
+      totalDescontos: "2232.00",
+      totalLiquido: "4968.00",
+    },
+    {
+      Nome: "Carlos Mendes",
+      recibosProcessados: 6,
+      totalRemuneracoes: "6000.00",
+      totalDescontos: "1860.00",
+      totalLiquido: "4140.00",
+    },
+    {
+      Nome: "Rita Gomes",
+      recibosProcessados: 6,
+      totalRemuneracoes: "6600.00",
+      totalDescontos: "2046.00",
+      totalLiquido: "4554.00",
+    },
+    {
+      Nome: "Paulo Fernandes",
+      recibosProcessados: 6,
+      totalRemuneracoes: "7800.00",
+      totalDescontos: "2418.00",
+      totalLiquido: "5382.00",
+    },
+    {
+      Nome: "Conceição Alves",
+      recibosProcessados: 6,
+      totalRemuneracoes: "10800.00",
+      totalDescontos: "3348.00",
+      totalLiquido: "7452.00",
+    },
+    {
+      Nome: "Rui Martins",
+      recibosProcessados: 6,
+      totalRemuneracoes: "8400.00",
+      totalDescontos: "2604.00",
+      totalLiquido: "5796.00",
+    },
+    {
+      Nome: "Joana Mota",
+      recibosProcessados: 0,
+      totalRemuneracoes: "0.00",
+      totalDescontos: "0.00",
+      totalLiquido: "0.00",
+    },
   ],
 };
 
-export async function getHR() {
+export async function getHR(): Promise<any> {
   try {
     const [funcRaw, recibosRaw, feriasRaw, historicoRaw] = await Promise.all([
       runSql(`SELECT f.Codigo, f.Nome, f.Categoria, f.Situacao, f.DataAdmissao, f.DataFimContrato,
@@ -1143,7 +1486,7 @@ export async function getHR() {
       runSql(`SELECT f.Codigo, f.Nome, COUNT(*) AS registos, MAX(DataFim) AS ultimaAlteracao
         FROM RHP_HistoricoRegistoVinculo h
         LEFT JOIN Funcionarios f ON f.Codigo=h.CodFunc
-        GROUP BY f.Codigo, f.Nome FOR JSON PATH`)
+        GROUP BY f.Codigo, f.Nome FOR JSON PATH`),
     ]);
 
     const funcionarios = parseSqlJson(funcRaw) ?? [];
@@ -1154,9 +1497,9 @@ export async function getHR() {
     return {
       summary: {
         totalFuncionarios: funcionarios.length,
-        ativosAgora: funcionarios.filter((f) => f.Situacao === "001").length,
-        recibosProcessados: recibos.reduce((s, r) => s + (Number(r.recibosProcessados) || 0), 0),
-        custoAnualEstimado: recibos.reduce((s, r) => s + (Number(r.totalRemuneracoes) || 0), 0),
+        ativosAgora: funcionarios.filter((f: any) => f.Situacao === "001").length,
+        recibosProcessados: recibos.reduce((s: number, r: any) => s + (Number(r.recibosProcessados) || 0), 0),
+        custoAnualEstimado: recibos.reduce((s: number, r: any) => s + (Number(r.totalRemuneracoes) || 0), 0),
       },
       funcionarios,
       recibos,

@@ -26,7 +26,7 @@ import {
   getProductsDetail,
   getHRMonthly,
   getHR,
-} from "./demo.mjs";
+} from "../../dist-server/backends/demo.js";
 
 test("getReceivables() returns array with valid structure", async () => {
   const result = await getReceivables();

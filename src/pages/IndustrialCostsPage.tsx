@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { apiUrl } from "@/lib/api";
-
-const fmt = (n: number) => new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(n);
-const fmtPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
+import { formatCurrency, formatPercent } from "@/lib/format";
+import { PageWrapper, SectionHeader, KPIGrid, PageLoadingState, PageEmptyState } from "@/components";
 
 type CostAnalysisData = {
   fixedCosts: { Conta: string; Descricao: string; total: number }[];
@@ -36,46 +35,50 @@ export default function IndustrialCostsPage() {
     { key: "fornecedores", label: "Fornecedores", icon: "🚚" },
   ] as const;
 
-  if (loading) return <div className="flex min-h-[400px] items-center justify-center text-sm text-muted-foreground">A carregar custos industriais...</div>;
-  if (!data) return <div className="p-6 text-sm text-muted-foreground">Sem dados de custos disponíveis.</div>;
+  if (loading) return <PageWrapper><PageLoadingState /></PageWrapper>;
+  if (!data) return <PageWrapper><PageEmptyState title="Sem dados" description="Dados de custos não disponíveis." /></PageWrapper>;
+
+  const totalFixed = data.fixedCosts.reduce((s, c) => s + c.total, 0);
+  const totalVariable = data.variableCosts.reduce((s, c) => s + c.total, 0);
+  const totalEnergy = data.energyCosts.reduce((s, c) => s + c.total, 0);
+
+  const items = [
+    { label: "Custos Fixos", value: formatCurrency(totalFixed), tone: "default" as const },
+    { label: "Custos Variáveis", value: formatCurrency(totalVariable), tone: "warning" as const },
+    { label: "Energia", value: formatCurrency(totalEnergy), tone: "warning" as const },
+    { label: "Fornecedores", value: String(data.suppliers.length), tone: "default" as const },
+    { label: "Taxa de Refugo", value: formatPercent(data.waste.taxaRefugo), tone: data.waste.taxaRefugo > 5 ? "danger" as const : "success" as const },
+  ];
 
   return (
-    <section className="rounded-lg border border-border bg-background shadow-[0_1px_6px_rgba(15,23,42,0.06)]">
-      <div className="flex items-center justify-between border-b border-border p-6">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary">PRODUÇÃO E CUSTOS</p>
-          <h2 className="mt-2 text-[24px] font-bold">Custos industriais</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Matéria-prima, transformação, energia, desvios e custos reais por ordem.</p>
-        </div>
-        <span className="rounded bg-success-soft px-2 py-1 text-xs font-semibold text-success">PRIMAVERA SQL</span>
-      </div>
+    <PageWrapper>
+      <SectionHeader category="Produção e Custos" title="Custos industriais" description="Matéria-prima, transformação, energia, desvios e custos reais por ordem." />
+      <div className="mt-5"><KPIGrid items={items} /></div>
 
-      <div className="border-b border-border px-6 py-3">
-        <div className="flex gap-1 rounded-lg bg-muted p-1 overflow-x-auto">
+      <div className="mt-5 rounded-xl border border-border bg-background p-4">
+        <div className="mb-4 flex gap-1 rounded-xl bg-muted p-1 overflow-x-auto">
           {tabs.map((tab) => (
             <button
               key={tab.key}
               type="button"
               onClick={() => setActiveTab(tab.key)}
               className={cn(
-                "flex items-center gap-2 rounded-md px-4 py-1.5 text-sm font-medium transition-colors whitespace-nowrap",
+                "flex items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors whitespace-nowrap",
                 activeTab === tab.key
                   ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground hover:text-muted-foreground"
               )}
             >
               <span>{tab.icon}</span> {tab.label}
             </button>
           ))}
         </div>
-      </div>
 
-      <div className="p-6">
         {activeTab === "fixos" && (
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full min-w-[600px] text-sm">
-              <thead>
-                <tr className="border-b bg-muted/30 text-left text-xs text-muted-foreground">
+              <thead className="bg-muted/60">
+                <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <th className="px-4 py-3">Conta</th>
                   <th className="px-4 py-3">Descrição</th>
                   <th className="px-4 py-3 text-right">Total</th>
@@ -83,10 +86,10 @@ export default function IndustrialCostsPage() {
               </thead>
               <tbody>
                 {data.fixedCosts.map((c, i) => (
-                  <tr key={i} className="border-b hover:bg-muted/20">
-                    <td className="px-4 py-3 font-mono text-xs">{c.Conta}</td>
-                    <td className="px-4 py-3">{c.Descricao}</td>
-                    <td className="px-4 py-3 text-right text-danger">{fmt(c.total)}</td>
+                  <tr key={i} className="border-b border-border hover:bg-muted/40">
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{c.Conta}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{c.Descricao}</td>
+                    <td className="px-4 py-3 text-right text-danger tabular-nums">{formatCurrency(c.total)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -97,8 +100,8 @@ export default function IndustrialCostsPage() {
         {activeTab === "variaveis" && (
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full min-w-[600px] text-sm">
-              <thead>
-                <tr className="border-b bg-muted/30 text-left text-xs text-muted-foreground">
+              <thead className="bg-muted/60">
+                <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <th className="px-4 py-3">Conta</th>
                   <th className="px-4 py-3">Descrição</th>
                   <th className="px-4 py-3 text-right">Total</th>
@@ -106,10 +109,10 @@ export default function IndustrialCostsPage() {
               </thead>
               <tbody>
                 {data.variableCosts.map((c, i) => (
-                  <tr key={i} className="border-b hover:bg-muted/20">
-                    <td className="px-4 py-3 font-mono text-xs">{c.Conta}</td>
-                    <td className="px-4 py-3">{c.Descricao}</td>
-                    <td className="px-4 py-3 text-right text-danger">{fmt(c.total)}</td>
+                  <tr key={i} className="border-b border-border hover:bg-muted/40">
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{c.Conta}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{c.Descricao}</td>
+                    <td className="px-4 py-3 text-right text-danger tabular-nums">{formatCurrency(c.total)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -120,8 +123,8 @@ export default function IndustrialCostsPage() {
         {activeTab === "energia" && (
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full min-w-[600px] text-sm">
-              <thead>
-                <tr className="border-b bg-muted/30 text-left text-xs text-muted-foreground">
+              <thead className="bg-muted/60">
+                <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <th className="px-4 py-3">Conta</th>
                   <th className="px-4 py-3">Descrição</th>
                   <th className="px-4 py-3 text-right">Total</th>
@@ -129,10 +132,10 @@ export default function IndustrialCostsPage() {
               </thead>
               <tbody>
                 {data.energyCosts.map((c, i) => (
-                  <tr key={i} className="border-b hover:bg-muted/20">
-                    <td className="px-4 py-3 font-mono text-xs">{c.Conta}</td>
-                    <td className="px-4 py-3">{c.Descricao}</td>
-                    <td className="px-4 py-3 text-right text-danger">{fmt(c.total)}</td>
+                  <tr key={i} className="border-b border-border hover:bg-muted/40">
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{c.Conta}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{c.Descricao}</td>
+                    <td className="px-4 py-3 text-right text-danger tabular-nums">{formatCurrency(c.total)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -141,22 +144,22 @@ export default function IndustrialCostsPage() {
         )}
 
         {activeTab === "refugo" && (
-          <div className="grid gap-4 md:grid-cols-4">
-            <div className="rounded-lg border border-border bg-muted/20 p-5">
+          <div className="grid gap-3 md:grid-cols-4">
+            <div className="rounded-lg border border-border bg-background p-4">
               <p className="text-xs font-semibold text-muted-foreground">Total Ordens</p>
-              <p className="mt-2 text-2xl font-bold">{data.waste.totalOrdens}</p>
+              <p className="mt-2 text-xl font-semibold tabular-nums text-foreground">{data.waste.totalOrdens}</p>
             </div>
-            <div className="rounded-lg border border-border bg-muted/20 p-5">
+            <div className="rounded-lg border border-border bg-background p-4">
               <p className="text-xs font-semibold text-muted-foreground">Ordens Refugo</p>
-              <p className="mt-2 text-2xl font-bold text-danger">{data.waste.ordensRefugo}</p>
+              <p className="mt-2 text-xl font-semibold text-danger tabular-nums">{data.waste.ordensRefugo}</p>
             </div>
-            <div className="rounded-lg border border-border bg-muted/20 p-5">
+            <div className="rounded-lg border border-border bg-background p-4">
               <p className="text-xs font-semibold text-muted-foreground">Custo Refugo</p>
-              <p className="mt-2 text-2xl font-bold text-danger">{fmt(data.waste.custoRefugo)}</p>
+              <p className="mt-2 text-xl font-semibold text-danger tabular-nums">{formatCurrency(data.waste.custoRefugo)}</p>
             </div>
-            <div className={cn("rounded-lg border p-5", data.waste.taxaRefugo > 5 ? "border-danger/30 bg-danger/5" : "border-border bg-muted/20")}>
+            <div className={cn("rounded-lg border p-4", data.waste.taxaRefugo > 5 ? "border-danger/20 bg-danger-soft/40" : "border-border bg-background")}>
               <p className="text-xs font-semibold text-muted-foreground">Taxa Refugo</p>
-              <p className={cn("mt-2 text-2xl font-bold", data.waste.taxaRefugo > 5 ? "text-danger" : "text-success")}>{fmtPct(data.waste.taxaRefugo)}</p>
+              <p className={cn("mt-2 text-xl font-semibold tabular-nums", data.waste.taxaRefugo > 5 ? "text-danger" : "text-success")}>{formatPercent(data.waste.taxaRefugo)}</p>
             </div>
           </div>
         )}
@@ -164,8 +167,8 @@ export default function IndustrialCostsPage() {
         {activeTab === "fornecedores" && (
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full min-w-[700px] text-sm">
-              <thead>
-                <tr className="border-b bg-muted/30 text-left text-xs text-muted-foreground">
+              <thead className="bg-muted/60">
+                <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <th className="px-4 py-3">Fornecedor</th>
                   <th className="px-4 py-3 text-right">Compras</th>
                   <th className="px-4 py-3 text-right">Docs</th>
@@ -174,14 +177,14 @@ export default function IndustrialCostsPage() {
               </thead>
               <tbody>
                 {data.suppliers.map((s, i) => (
-                  <tr key={i} className="border-b hover:bg-muted/20">
+                  <tr key={i} className="border-b border-border hover:bg-muted/40">
                     <td className="px-4 py-3">
-                      <p className="font-medium">{s.name}</p>
+                      <p className="font-medium text-muted-foreground">{s.name}</p>
                       <p className="text-xs text-muted-foreground">{s.code}</p>
                     </td>
-                    <td className="px-4 py-3 text-right font-semibold text-danger">{fmt(s.totalCompras)}</td>
-                    <td className="px-4 py-3 text-right">{s.docCount}</td>
-                    <td className="px-4 py-3 text-right">{s.prazoMedio?.toFixed(1) ?? "—"} dias</td>
+                    <td className="px-4 py-3 text-right font-semibold text-danger tabular-nums">{formatCurrency(s.totalCompras)}</td>
+                    <td className="px-4 py-3 text-right text-muted-foreground">{s.docCount}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{s.prazoMedio?.toFixed(1) ?? "—"} dias</td>
                   </tr>
                 ))}
               </tbody>
@@ -189,6 +192,6 @@ export default function IndustrialCostsPage() {
           </div>
         )}
       </div>
-    </section>
+    </PageWrapper>
   );
 }

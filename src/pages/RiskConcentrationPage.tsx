@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { apiUrl } from "@/lib/api";
-
-const fmt = (n: number) => new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(n);
-const fmtPct = (n: number) => `${n.toFixed(1)}%`;
+import { formatCurrency, formatPercent } from "@/lib/format";
+import { PageWrapper, SectionHeader, KPIGrid, PageLoadingState, PageEmptyState } from "@/components";
 
 type ConcentrationData = {
   byClient: {
@@ -42,10 +41,10 @@ export default function RiskConcentrationPage() {
     Promise.all([
       fetch(apiUrl("/api/customers")).then(r => r.json()).catch(() => ({ customers: [] })),
       fetch(apiUrl("/api/profitability/product")).then(r => r.json()).catch(() => []),
-    ]).then(([custData, prodData]) => {
+    ]).then(([custData, prodData]: [{ customers: Array<{ code: string; name: string; salesAmount: number; currentDebt: number }> }, Array<{ code: string; name: string; revenue: number; margin: number }>]) => {
       if (ignore) return;
-      const customers: any[] = custData.customers ?? [];
-      const products: any[] = prodData ?? [];
+      const customers = custData.customers ?? [];
+      const products: Array<{ code: string; name: string; revenue: number; margin: number }> = Array.isArray(prodData) ? prodData : [];
 
       const totalSales = customers.reduce((s, c) => s + c.salesAmount, 0);
       const totalDebt = customers.reduce((s, c) => s + c.currentDebt, 0);
@@ -78,16 +77,16 @@ export default function RiskConcentrationPage() {
         .sort((a, b) => b.revenue - a.revenue);
 
       const top5 = byClient.slice(0, 5);
-      const hhiSales = byClient.reduce((s: number, c: any) => s + Math.pow(c.salesShare / 100, 2), 0) * 10000;
-      const hhiDebt = byClient.reduce((s: number, c: any) => s + Math.pow(c.debtShare / 100, 2), 0) * 10000;
+      const hhiSales = byClient.reduce((s, c) => s + Math.pow(c.salesShare / 100, 2), 0) * 10000;
+      const hhiDebt = byClient.reduce((s, c) => s + Math.pow(c.debtShare / 100, 2), 0) * 10000;
 
       setData({
         byClient,
         byProduct,
         summary: {
-          top5SalesShare: top5.reduce((s: number, c: any) => s + c.salesShare, 0),
-          top5DebtShare: top5.reduce((s: number, c: any) => s + c.debtShare, 0),
-          top5MarginShare: top5.reduce((s: number, c: any) => s + c.marginShare, 0),
+          top5SalesShare: top5.reduce((s, c) => s + c.salesShare, 0),
+          top5DebtShare: top5.reduce((s, c) => s + c.debtShare, 0),
+          top5MarginShare: top5.reduce((s, c) => s + c.marginShare, 0),
           hhiSales: Math.round(hhiSales),
           hhiDebt: Math.round(hhiDebt),
         },
@@ -96,25 +95,33 @@ export default function RiskConcentrationPage() {
     return () => { ignore = true; };
   }, []);
 
-  if (loading) return <div className="flex min-h-[400px] items-center justify-center text-sm text-muted-foreground">A carregar concentração de risco...</div>;
-  if (!data) return <div className="p-6 text-sm text-muted-foreground">Sem dados de concentração.</div>;
+  if (loading) return <PageLoadingState message="A carregar concentração de risco..." />;
+  if (!data) return <PageEmptyState title="Sem dados" description="Sem dados de concentração disponíveis." />;
 
   const currentData = view === "clientes" ? data.byClient : data.byProduct;
   const isClientView = view === "clientes";
 
-  return (
-    <section className="rounded-lg border border-border bg-background shadow-[0_1px_6px_rgba(15,23,42,0.06)]">
-      <div className="flex items-center justify-between border-b border-border p-6">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary">CLIENTES</p>
-          <h2 className="mt-2 text-[24px] font-bold">Concentração de risco</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Peso de clientes/produtos no volume, dívida, margem e risco de cobrança.</p>
-        </div>
-        <span className="rounded bg-success-soft px-2 py-1 text-xs font-semibold text-success">PRIMAVERA SQL</span>
-      </div>
+  const kpiItems = [
+    { label: "Top 5 Faturação", value: formatPercent(data.summary.top5SalesShare), tone: "default" as const, subtext: "Concentração vendas" },
+    { label: "Top 5 Dívida", value: formatPercent(data.summary.top5DebtShare), tone: "danger" as const, subtext: "Concentração recebíveis" },
+    { label: "HHI Vendas", value: String(data.summary.hhiSales), tone: data.summary.hhiSales > 2500 ? "danger" as const : "default" as const, subtext: data.summary.hhiSales > 2500 ? "Alta concentração" : "Moderada" },
+    { label: "HHI Dívida", value: String(data.summary.hhiDebt), tone: data.summary.hhiDebt > 2500 ? "danger" as const : "default" as const, subtext: data.summary.hhiDebt > 2500 ? "Alta concentração" : "Moderada" },
+    { label: "Top 5 Margem", value: formatPercent(data.summary.top5MarginShare), tone: "success" as const, subtext: "Concentração margem" },
+  ];
 
-      <div className="border-b border-border px-6 py-3">
-        <div className="flex gap-1 rounded-lg bg-muted p-1">
+  return (
+    <PageWrapper>
+      <div className="w-full space-y-8">
+        <SectionHeader
+          category="Clientes"
+          title="Concentração de risco"
+          description="Peso de clientes/produtos no volume, dívida, margem e risco de cobrança."
+        />
+
+        <KPIGrid items={kpiItems} />
+
+        <div className="mt-5 rounded-xl border border-border bg-background p-4">
+        <div className="mb-4 flex gap-1 rounded-xl bg-muted p-1 w-fit">
           {[
             { key: "clientes", label: "Por Cliente" },
             { key: "produtos", label: "Por Produto" },
@@ -122,42 +129,17 @@ export default function RiskConcentrationPage() {
             <button
               key={tab.key}
               type="button"
-              onClick={() => setView(tab.key as any)}
+              onClick={() => setView(tab.key as "clientes" | "produtos")}
               className={cn(
-                "rounded-md px-4 py-1.5 text-sm font-medium transition-colors",
+                "rounded-lg px-4 py-1.5 text-sm font-medium transition-colors",
                 view === tab.key
                   ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground hover:text-muted-foreground"
               )}
             >
               {tab.label}
             </button>
           ))}
-        </div>
-      </div>
-
-      <div className="p-6">
-        <div className="grid gap-4 mb-6 md:grid-cols-4">
-          <div className="rounded-lg border border-border bg-muted/20 p-5">
-            <p className="text-xs font-semibold text-muted-foreground">Top 5 Faturação</p>
-            <p className="mt-2 text-2xl font-bold">{fmtPct(data.summary.top5SalesShare)}</p>
-            <p className="text-xs text-muted-foreground">Concentração vendas</p>
-          </div>
-          <div className="rounded-lg border border-border bg-muted/20 p-5">
-            <p className="text-xs font-semibold text-muted-foreground">Top 5 Dívida</p>
-            <p className="mt-2 text-2xl font-bold text-danger">{fmtPct(data.summary.top5DebtShare)}</p>
-            <p className="text-xs text-muted-foreground">Concentração recebíveis</p>
-          </div>
-          <div className="rounded-lg border border-border bg-muted/20 p-5">
-            <p className="text-xs font-semibold text-muted-foreground">HHI Vendas</p>
-            <p className="mt-2 text-2xl font-bold">{data.summary.hhiSales}</p>
-            <p className="text-xs text-muted-foreground">{data.summary.hhiSales > 2500 ? "Alta concentração" : "Moderada"}</p>
-          </div>
-          <div className="rounded-lg border border-border bg-muted/20 p-5">
-            <p className="text-xs font-semibold text-muted-foreground">HHI Dívida</p>
-            <p className="mt-2 text-2xl font-bold">{data.summary.hhiDebt}</p>
-            <p className="text-xs text-muted-foreground">{data.summary.hhiDebt > 2500 ? "Alta concentração" : "Moderada"}</p>
-          </div>
         </div>
 
         {currentData.length === 0 ? (
@@ -165,8 +147,8 @@ export default function RiskConcentrationPage() {
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full min-w-[800px] text-sm">
-              <thead>
-                <tr className="border-b bg-muted/30 text-left text-xs text-muted-foreground">
+              <thead className="bg-muted/60">
+                <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <th className="px-4 py-3">Item</th>
                   {isClientView ? (
                     <>
@@ -189,32 +171,38 @@ export default function RiskConcentrationPage() {
                 </tr>
               </thead>
               <tbody>
-                {currentData.map((item: any, i: number) => {
-                  const cumulative = currentData.slice(0, i + 1).reduce((s: number, x: any) => s + (isClientView ? x.salesShare : x.revenueShare), 0);
+                {currentData.map((item, i) => {
+                  const itemAsClient = item as unknown as typeof data.byClient[0];
+                  const itemAsProduct = item as unknown as typeof data.byProduct[0];
+                  const cumulative = currentData.slice(0, i + 1).reduce((s, x) => {
+                    const xAsClient = x as unknown as typeof data.byClient[0];
+                    const xAsProduct = x as unknown as typeof data.byProduct[0];
+                    return s + (isClientView ? xAsClient.salesShare : xAsProduct.revenueShare);
+                  }, 0);
                   return (
-                    <tr key={`${item.code}-${i}`} className="border-b hover:bg-muted/20">
+                    <tr key={`${item.code}-${i}`} className="border-b border-border hover:bg-muted/40">
                       <td className="px-4 py-3">
-                        <p className="font-medium">{item.name}</p>
+                        <p className="font-medium text-muted-foreground">{item.name}</p>
                         <p className="text-xs text-muted-foreground">{item.code}</p>
                       </td>
                       {isClientView ? (
                         <>
-                          <td className="px-4 py-3 text-right font-semibold">{fmt(item.salesAmount)}</td>
-                          <td className="px-4 py-3 text-right">{fmtPct(item.salesShare)}</td>
-                          <td className="px-4 py-3 text-right text-danger">{fmt(item.currentDebt)}</td>
-                          <td className="px-4 py-3 text-right">{fmtPct(item.debtShare)}</td>
-                          <td className="px-4 py-3 text-right">{fmt(item.salesAmount - item.currentDebt * 0.3)}</td>
-                          <td className="px-4 py-3 text-right">{fmtPct(item.marginShare)}</td>
+                          <td className="px-4 py-3 text-right font-semibold tabular-nums text-muted-foreground">{formatCurrency(itemAsClient.salesAmount)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{formatPercent(itemAsClient.salesShare)}</td>
+                          <td className="px-4 py-3 text-right text-danger tabular-nums">{formatCurrency(itemAsClient.currentDebt)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{formatPercent(itemAsClient.debtShare)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{formatCurrency(itemAsClient.salesAmount - itemAsClient.currentDebt * 0.3)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{formatPercent(itemAsClient.marginShare)}</td>
                         </>
                       ) : (
                         <>
-                          <td className="px-4 py-3 text-right font-semibold">{fmt(item.revenue)}</td>
-                          <td className="px-4 py-3 text-right">{fmtPct(item.revenueShare)}</td>
-                          <td className="px-4 py-3 text-right">{fmt(item.margin)}</td>
-                          <td className="px-4 py-3 text-right">{fmtPct(item.marginShare)}</td>
+                          <td className="px-4 py-3 text-right font-semibold tabular-nums text-muted-foreground">{formatCurrency(itemAsProduct.revenue)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{formatPercent(itemAsProduct.revenueShare)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{formatCurrency(itemAsProduct.margin)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{formatPercent(itemAsProduct.marginShare)}</td>
                         </>
                       )}
-                      <td className="px-4 py-3 text-right font-mono font-semibold">{fmtPct(cumulative)}</td>
+                      <td className="px-4 py-3 text-right font-mono font-semibold tabular-nums text-muted-foreground">{formatPercent(cumulative)}</td>
                     </tr>
                   );
                 })}
@@ -222,7 +210,8 @@ export default function RiskConcentrationPage() {
             </table>
           </div>
         )}
+        </div>
       </div>
-    </section>
+    </PageWrapper>
   );
 }

@@ -1,13 +1,13 @@
-import { all, get } from "../db/sqlite-client.mjs";
+import { all, get } from "../db/sqlite-client.js";
 
 export const meta = { source: "ERP Finance Demo (SQLite)", server: "sqlite", database: "erp-finance-demo.sqlite" };
 
-function today() {
+function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export async function getReceivables() {
-  return all(`
+export async function getReceivables(): Promise<any[]> {
+  return all<any>(`
     SELECT
       COALESCE(c.Nome, '') AS clientName,
       COALESCE(c.NumContrib, '') AS nif,
@@ -34,7 +34,7 @@ export async function getReceivables() {
   `, [today(), today()]);
 }
 
-const MODULE_TABLES = [
+const MODULE_TABLES: [string, string, string][] = [
   ["BAS", "Base Aplicacional", "Clientes"],
   ["VND", "Vendas", "CabecDoc"],
   ["VND-LIN", "Linhas de venda", "LinhasDoc"],
@@ -55,12 +55,12 @@ const MODULE_TABLES = [
   ["VDR", "Vendedores", "Vendedores"],
 ];
 
-export async function getModules() {
-  const modules = MODULE_TABLES.map(([code, name, tableName]) => ({
+export async function getModules(): Promise<any[]> {
+  const modules: any[] = MODULE_TABLES.map(([code, name, tableName]) => ({
     code, name, tableName,
-    records: get(`SELECT COUNT(*) AS n FROM ${tableName}`).n,
+    records: get<any>(`SELECT COUNT(*) AS n FROM ${tableName}`)?.n,
   }));
-  const versionRows = all(`SELECT DISTINCT Modulo FROM VersaoModulo ORDER BY Modulo`);
+  const versionRows = all<any>(`SELECT DISTINCT Modulo FROM VersaoModulo ORDER BY Modulo`);
   for (const { Modulo } of versionRows) {
     modules.push({ code: Modulo, name: `Módulo ${Modulo}`, tableName: "VersaoModulo", records: 1 });
   }
@@ -68,8 +68,8 @@ export async function getModules() {
   return modules;
 }
 
-export async function getCustomers() {
-  return all(`
+export async function getCustomers(): Promise<any[]> {
+  return all<any>(`
     SELECT
       c.Cliente AS code, c.Nome AS name,
       COALESCE(c.Email, '') AS email, COALESCE(c.Fac_Tel, '') AS telefone,
@@ -90,26 +90,26 @@ export async function getCustomers() {
   `);
 }
 
-export async function getCashFlow() {
+export async function getCashFlow(): Promise<any> {
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-  const receivablesByMonth = all(`
+  const receivablesByMonth = all<any>(`
     SELECT strftime('%Y-%m', DataVencimento) AS month, COUNT(*) AS docs,
       ROUND(SUM(COALESCE(NULLIF(TotalDocumento,0), TotalMerc+TotalIva-TotalDesc)), 2) AS total
     FROM CabecDoc
     WHERE TipoEntidade='C' AND DataVencimento >= date('now','-3 months') AND DataVencimento <= date('now','+6 months')
     GROUP BY month ORDER BY month
   `);
-  const payablesByMonth = all(`
+  const payablesByMonth = all<any>(`
     SELECT strftime('%Y-%m', DataVencimento) AS month, COUNT(*) AS docs,
       ROUND(SUM(COALESCE(NULLIF(TotalDocumento,0), TotalMerc+TotalIva-TotalDesc)), 2) AS total
     FROM CabecCompras
     WHERE DataVencimento >= date('now','-3 months') AND DataVencimento <= date('now','+6 months')
     GROUP BY month ORDER BY month
   `);
-  const bankAccounts = all(`SELECT Conta, DescBanco, Banco, Moeda, TipoConta FROM ContasBancarias`);
-  const treasuryMovements = all(`
+  const bankAccounts = all<any>(`SELECT Conta, DescBanco, Banco, Moeda, TipoConta FROM ContasBancarias`);
+  const treasuryMovements = all<any>(`
     SELECT TipoDoc, (TipoDoc || ' ' || Serie || '/' || NumDoc) AS doc,
       COALESCE(Entidade,'') AS entidade, TipoEntidade,
       ROUND(TotalDebito, 2) AS debit, ROUND(TotalCredito, 2) AS credit,
@@ -130,8 +130,8 @@ export async function getCashFlow() {
   };
 }
 
-export async function getDocumentLines(docNumber) {
-  return all(`
+export async function getDocumentLines(docNumber: string): Promise<any[]> {
+  return all<any>(`
     SELECT l.NumLinha, l.Artigo, COALESCE(l.Descricao,'') AS descricao,
       ROUND(l.Quantidade, 4) AS quantidade, ROUND(l.PrecUnit, 4) AS precUnit,
       ROUND(COALESCE(l.Desconto1,0), 2) AS desconto,
@@ -144,29 +144,29 @@ export async function getDocumentLines(docNumber) {
   `, [docNumber]);
 }
 
-export async function openErp() {
+export async function openErp(): Promise<{ launched: boolean; error: string }> {
   return { launched: false, error: "Não disponível em modo demo" };
 }
 
-export function launchErp() {
+export function launchErp(): void {
   // no-op in demo mode: there is no local PRIMAVERA install to open
 }
 
-const paymentLog = [];
+const paymentLog: any[] = [];
 
-export function registerPayment(data) {
+export function registerPayment(data: any): { ok: boolean; id: number } {
   paymentLog.push({ ...data, registeredAt: new Date().toISOString() });
   return { ok: true, id: paymentLog.length };
 }
 
-export async function getFinancialKPIs() {
-  const dre = get(`
+export async function getFinancialKPIs(): Promise<any> {
+  const dre = get<any>(`
     SELECT
       ROUND(COALESCE(SUM(CASE WHEN Conta='711' AND Natureza='C' THEN Valor WHEN Conta='711' AND Natureza='D' THEN -Valor ELSE 0 END), 0), 2) AS vendas,
       ROUND(COALESCE(SUM(CASE WHEN Conta='611' AND Natureza='D' THEN Valor WHEN Conta='611' AND Natureza='C' THEN -Valor ELSE 0 END), 0), 2) AS cmv,
       ROUND(COALESCE(SUM(CASE WHEN substr(Conta,1,1)='6' AND Conta<>'611' AND Natureza='D' THEN Valor ELSE 0 END), 0), 2) AS gastos
     FROM Movimentos WHERE DataGravacao >= date('now','-12 months')
-  `);
+  `) ?? {};
   // Recent-documents proxy only: the demo dataset never marks a sales
   // document as "paid" (no settlement tracking), so summing every document
   // ever issued would overstate outstanding AR far beyond a realistic DSO.
@@ -174,7 +174,7 @@ export async function getFinancialKPIs() {
   // documents (by position, not by real-world date, so this stays correct
   // regardless of how long ago the seed dataset's fixed date range was
   // generated relative to the real clock).
-  const rec = get(`
+  const rec = get<any>(`
     SELECT ROUND(COALESCE(SUM(COALESCE(NULLIF(TotalDocumento,0),TotalMerc+TotalIva-TotalDesc)),0),2) AS totalRecebiveis
     FROM (
       SELECT d.TotalDocumento, d.TotalMerc, d.TotalIva, d.TotalDesc
@@ -184,19 +184,19 @@ export async function getFinancialKPIs() {
       ORDER BY d.Data DESC
       LIMIT 10
     ) d
-  `);
-  const pay = get(`
+  `) ?? {};
+  const pay = get<any>(`
     SELECT ROUND(COALESCE(SUM(ABS(COALESCE(NULLIF(TotalDocumento,0),TotalMerc+TotalIva-TotalDesc))),0),2) AS totalPagar
     FROM (SELECT TotalDocumento, TotalMerc, TotalIva, TotalDesc FROM CabecCompras ORDER BY DataVencimento DESC LIMIT 10)
-  `);
-  const stk = get(`
+  `) ?? {};
+  const stk = get<any>(`
     SELECT ROUND(COALESCE(SUM(s.Stock * COALESCE(c.CustoGrpCstMBase,0)),0),2) AS valorStock
     FROM INV_ValoresActuaisStock s LEFT JOIN INV_ValoresActuaisCusteio c ON c.Artigo=s.Artigo
-  `);
-  const bnk = get(`
+  `) ?? {};
+  const bnk = get<any>(`
     SELECT ROUND(COALESCE(SUM(CASE WHEN Natureza='D' THEN Valor ELSE -Valor END),0),2) AS saldoBancario
     FROM Movimentos WHERE Conta='12' AND DataGravacao >= date('now','-12 months')
-  `);
+  `) ?? {};
 
   const vendas = Number(dre.vendas ?? 0);
   const cmv = Number(dre.cmv ?? 0);
@@ -219,8 +219,8 @@ export async function getFinancialKPIs() {
   };
 }
 
-export async function getDashboard() {
-  const kpis = get(`
+export async function getDashboard(): Promise<any> {
+  const kpis = get<any>(`
     SELECT
       ROUND(COALESCE(SUM(CASE WHEN d.DataVencimento < ? THEN COALESCE(NULLIF(d.TotalDocumento,0), d.TotalMerc+d.TotalIva-d.TotalDesc) ELSE 0 END), 0), 2) AS totalOverdue,
       ROUND(COALESCE(SUM(COALESCE(NULLIF(d.TotalDocumento,0), d.TotalMerc+d.TotalIva-d.TotalDesc)), 0), 2) AS totalOpen,
@@ -232,7 +232,7 @@ export async function getDashboard() {
       AND COALESCE(NULLIF(d.TotalDocumento,0), d.TotalMerc+d.TotalIva-d.TotalDesc) > 0
   `, [today()]);
 
-  const topClients = all(`
+  const topClients = all<any>(`
     SELECT c.Nome AS name, c.Cliente AS code,
       ROUND(COALESCE(SUM(COALESCE(NULLIF(d.TotalDocumento,0), d.TotalMerc+d.TotalIva-d.TotalDesc)),0), 2) AS salesAmount,
       ROUND(COALESCE(c.TotalDeb,0), 2) AS currentDebt
@@ -243,7 +243,7 @@ export async function getDashboard() {
     ORDER BY salesAmount DESC LIMIT 5
   `);
 
-  const salesTrend = all(`
+  const salesTrend = all<any>(`
     SELECT strftime('%Y-%m', Data) AS month,
       ROUND(SUM(COALESCE(NULLIF(TotalDocumento,0), TotalMerc+TotalIva-TotalDesc)), 2) AS total,
       COUNT(*) AS docs
@@ -251,7 +251,7 @@ export async function getDashboard() {
     GROUP BY month ORDER BY month
   `);
 
-  const payablesAlert = all(`
+  const payablesAlert = all<any>(`
     SELECT (c.TipoDoc || ' ' || c.Serie || '/' || c.NumDoc) AS doc,
       COALESCE(NULLIF(c.Nome,''), f.Nome) AS supplier,
       c.DataVencimento AS dueDate,
@@ -265,8 +265,8 @@ export async function getDashboard() {
   return { kpis: kpis ?? {}, topClients, salesTrend, payablesAlert };
 }
 
-export async function getPayables() {
-  return all(`
+export async function getPayables(): Promise<any[]> {
+  return all<any>(`
     SELECT
       (c.TipoDoc || ' ' || c.Serie || '/' || c.NumDoc) AS doc,
       c.Entidade AS supplierCode,
@@ -286,13 +286,13 @@ export async function getPayables() {
   `, [today(), today()]);
 }
 
-export async function getBanks() {
-  const accounts = all(`
+export async function getBanks(): Promise<any> {
+  const accounts = all<any>(`
     SELECT Conta, COALESCE(DescBanco,'') AS descBanco, COALESCE(Banco,'') AS banco, Moeda,
       TipoConta, ROUND(COALESCE(Limite,0), 2) AS limite
     FROM ContasBancarias ORDER BY Conta
   `);
-  const movements = all(`
+  const movements = all<any>(`
     SELECT (TipoDoc || ' ' || Serie || '/' || NumDoc) AS doc,
       TipoDoc, COALESCE(Entidade,'') AS entidade, TipoEntidade,
       ROUND(TotalDebito, 2) AS debit, ROUND(TotalCredito, 2) AS credit,
@@ -303,19 +303,19 @@ export async function getBanks() {
   return { accounts, movements };
 }
 
-export async function getDRE() {
-  const sales = get(`
+export async function getDRE(): Promise<any> {
+  const sales = get<any>(`
     SELECT ROUND(COALESCE(SUM(TotalMerc),0), 2) AS vendasMercadorias,
       ROUND(COALESCE(SUM(TotalDesc),0), 2) AS descontos,
       ROUND(COALESCE(SUM(TotalIva),0), 2) AS iva
     FROM CabecDoc d LEFT JOIN CabecDocStatus s ON s.IdCabecDoc=d.Id
     WHERE COALESCE(s.Anulado,0)=0 AND d.TipoEntidade='C' AND d.Data >= date('now','-12 months')
   `) ?? { vendasMercadorias: 0, descontos: 0, iva: 0 };
-  const opex = get(`
+  const opex = get<any>(`
     SELECT ROUND(COALESCE(SUM(Valor),0), 2) AS custosOperacionais
     FROM Movimentos WHERE Natureza='D' AND DataGravacao >= date('now','-12 months')
   `) ?? { custosOperacionais: 0 };
-  const production = get(`
+  const production = get<any>(`
     SELECT
       ROUND(COALESCE(SUM(CustoMateriaisReal + CustoTransformacaoReal + OutrosCustosReal),0), 2) AS custoProducaoReal,
       ROUND(COALESCE(SUM(CustoMateriaisPrevisto + CustoTransformacaoPrevisto + OutrosCustosPrevito),0), 2) AS custoProducaoPrevisto
@@ -348,8 +348,8 @@ export async function getDRE() {
   };
 }
 
-export async function getProductionCosts() {
-  const orders = all(`
+export async function getProductionCosts(): Promise<any> {
+  const orders = all<any>(`
     SELECT o.Id, o.OrdemFabrico, o.Artigo, COALESCE(a.Descricao, o.Artigo) AS ArtigoDescricao,
       o.QtOrdemFabrico AS Quantidade,
       o.CustoMateriaisPrevisto, o.CustoMateriaisReal,
@@ -359,18 +359,18 @@ export async function getProductionCosts() {
     FROM GPR_OrdemFabrico o LEFT JOIN Artigo a ON a.Artigo = o.Artigo
     ORDER BY o.DataOrdemFabrico DESC
   `);
-  const components = all(`
+  const components = all<any>(`
     SELECT IDOrdemFabrico, Componente, QtPrevista, QtConsumida, Preco,
       ROUND(QtConsumida * Preco, 2) AS custoReal, ROUND(QtPrevista * Preco, 2) AS custoPrevisto
     FROM GPR_OrdemFabricoComponentes
   `);
-  const operations = all(`
+  const operations = all<any>(`
     SELECT IDOrdemFabrico, Operacao, TempoPrevisto, TempoConsumido, CustoOperador, CustoMaquina,
       ROUND(CustoOperador + CustoMaquina, 2) AS custoTotal
     FROM GPR_OrdemFabricoOperacoes
   `);
-  const stock = all(`SELECT Artigo, EstadoStock, Stock, DataStock FROM INV_ValoresActuaisStock`);
-  const costing = all(`SELECT Artigo, GrupoCustos, CustoGrpCstMBase, CustoGrpCstLotMBase, DataCusteio FROM INV_ValoresActuaisCusteio`);
+  const stock = all<any>(`SELECT Artigo, EstadoStock, Stock, DataStock FROM INV_ValoresActuaisStock`);
+  const costing = all<any>(`SELECT Artigo, GrupoCustos, CustoGrpCstMBase, CustoGrpCstLotMBase, DataCusteio FROM INV_ValoresActuaisCusteio`);
 
   const totalMatPrevisto = orders.reduce((sum, o) => sum + Number(o.CustoMateriaisPrevisto || 0), 0);
   const totalMatReal = orders.reduce((sum, o) => sum + Number(o.CustoMateriaisReal || 0), 0);
@@ -379,7 +379,7 @@ export async function getProductionCosts() {
   const totalOutrosPrevisto = orders.reduce((sum, o) => sum + Number(o.OutrosCustosPrevito || 0), 0);
   const totalOutrosReal = orders.reduce((sum, o) => sum + Number(o.OutrosCustosReal || 0), 0);
 
-  const ordersByArticle = {};
+  const ordersByArticle: Record<string, any[]> = {};
   for (const o of orders) {
     if (!ordersByArticle[o.Artigo]) ordersByArticle[o.Artigo] = [];
     ordersByArticle[o.Artigo].push(o);
@@ -420,9 +420,9 @@ export async function getProductionCosts() {
   };
 }
 
-export async function getCostAnalysis() {
+export async function getCostAnalysis(): Promise<any> {
   const anoMin = new Date().getFullYear() - 1;
-  const debitCosts = all(`
+  const debitCosts = all<any>(`
     SELECT m.Conta, p.Descricao, ROUND(SUM(COALESCE(m.Valor,0)),2) AS total
     FROM Movimentos m JOIN PlanoContas p ON p.Conta = m.Conta
     WHERE m.Natureza = 'D' AND m.Ano >= ?
@@ -430,7 +430,7 @@ export async function getCostAnalysis() {
     HAVING SUM(COALESCE(m.Valor,0)) > 0
     ORDER BY total DESC LIMIT 20
   `, [anoMin]);
-  const creditCosts = all(`
+  const creditCosts = all<any>(`
     SELECT m.Conta, p.Descricao, ROUND(SUM(COALESCE(m.Valor,0)),2) AS total
     FROM Movimentos m JOIN PlanoContas p ON p.Conta = m.Conta
     WHERE m.Natureza = 'C' AND m.Ano >= ?
@@ -438,7 +438,7 @@ export async function getCostAnalysis() {
     HAVING SUM(COALESCE(m.Valor,0)) > 0
     ORDER BY total DESC LIMIT 10
   `, [anoMin]);
-  const production = get(`
+  const production = get<any>(`
     SELECT
       COUNT(*) AS totalOrdens,
       SUM(CASE WHEN Estado = 2 THEN 1 ELSE 0 END) AS ordensAbertas,
@@ -447,7 +447,7 @@ export async function getCostAnalysis() {
       ROUND(SUM(CustoMateriaisPrevisto + CustoTransformacaoPrevisto + OutrosCustosPrevito),2) AS custoTotalPrevisto
     FROM GPR_OrdemFabrico
   `) ?? { totalOrdens: 0, ordensAbertas: 0, ordensFechadas: 0, custoTotalReal: 0, custoTotalPrevisto: 0 };
-  const suppliers = all(`
+  const suppliers = all<any>(`
     SELECT f.Fornecedor AS code, f.Nome AS name, COUNT(c.Id) AS docCount,
       ROUND(SUM(ABS(COALESCE(NULLIF(c.TotalDocumento,0), c.TotalMerc+c.TotalIva-c.TotalDesc))),2) AS totalCompras,
       ROUND(AVG(julianday(c.DataVencimento) - julianday(c.DataDoc))) AS prazoMedio
@@ -471,8 +471,8 @@ export async function getCostAnalysis() {
   };
 }
 
-export async function getAlerts() {
-  const overdueClients = all(`
+export async function getAlerts(): Promise<any> {
+  const overdueClients = all<any>(`
     SELECT c.Cliente AS code, c.Nome AS name,
       ROUND(COALESCE(c.TotalDeb,0),2) AS divida, ROUND(COALESCE(c.LimiteCred,0),2) AS limite,
       CAST(julianday(?) - julianday(MAX(d.DataVencimento)) AS INTEGER) AS diasAtrasoMax
@@ -487,14 +487,14 @@ export async function getAlerts() {
     ORDER BY divida DESC LIMIT 10
   `, [today(), today()]);
 
-  const lowStock = all(`
+  const lowStock = all<any>(`
     SELECT a.Artigo, a.Descricao, s.Stock, s.EstadoStock
     FROM INV_ValoresActuaisStock s JOIN Artigo a ON a.Artigo = s.Artigo
     WHERE s.Stock <= 5 AND s.EstadoStock = 'N'
     ORDER BY s.Stock ASC LIMIT 10
   `);
 
-  const overBudget = all(`
+  const overBudget = all<any>(`
     SELECT m.Conta, p.Descricao, ROUND(SUM(COALESCE(m.Valor,0)),2) AS gasto, 0 AS orcamento
     FROM Movimentos m JOIN PlanoContas p ON p.Conta = m.Conta
     WHERE m.Natureza = 'D' AND m.DataGravacao >= date('now','-1 months')
@@ -502,7 +502,7 @@ export async function getAlerts() {
     ORDER BY gasto DESC LIMIT 10
   `);
 
-  const cash = get(`
+  const cash = get<any>(`
     SELECT
       ROUND(COALESCE(SUM(CASE WHEN TipoEntidade='C' THEN TotalCredito ELSE 0 END),0),2) AS entradas,
       ROUND(COALESCE(SUM(CASE WHEN TipoEntidade='F' THEN TotalDebito ELSE 0 END),0),2) AS saidas,
@@ -510,7 +510,7 @@ export async function getAlerts() {
     FROM CabecTesouraria WHERE DataUltimaActualizacao >= date('now','-30 days')
   `) ?? { entradas: 0, saidas: 0, saldo: 0 };
 
-  const payablesDue = all(`
+  const payablesDue = all<any>(`
     SELECT (c.TipoDoc || ' ' || c.Serie || '/' || c.NumDoc) AS doc,
       COALESCE(NULLIF(c.Nome,''), f.Nome) AS fornecedor,
       c.DataVencimento AS vencimento,
@@ -566,16 +566,16 @@ export async function getAlerts() {
   };
 }
 
-export async function getHRCosts() {
+export async function getHRCosts(): Promise<any> {
   const anoMin = new Date().getFullYear() - 1;
-  const contabilidade = all(`
+  const contabilidade = all<any>(`
     SELECT m.Conta, p.Descricao, ROUND(SUM(COALESCE(m.Valor,0)),2) AS total
     FROM Movimentos m JOIN PlanoContas p ON p.Conta=m.Conta
     WHERE m.Natureza='D' AND m.Conta IN ('6421','6452','6455') AND m.Ano >= ?
     GROUP BY m.Conta, p.Descricao ORDER BY total DESC
   `, [anoMin]);
 
-  const totais = get(`
+  const totais = get<any>(`
     SELECT
       COUNT(*) AS totalFuncionarios,
       SUM(CASE WHEN Situacao='A' THEN 1 ELSE 0 END) AS ativos,
@@ -584,7 +584,7 @@ export async function getHRCosts() {
     FROM Funcionarios
   `) ?? { totalFuncionarios: 0, ativos: 0, massaSalarialMensal: 0, massaSalarialAnual: 0 };
 
-  const detalhe = all(`
+  const detalhe = all<any>(`
     SELECT Codigo, Nome, Categoria, Situacao, ROUND(COALESCE(Vencimento,0),2) AS vencimento, DataAdmissao
     FROM Funcionarios ORDER BY Vencimento DESC LIMIT 20
   `);
@@ -639,7 +639,7 @@ export async function getHRCosts() {
   };
 }
 
-export async function buildFinancialSummary() {
+export async function buildFinancialSummary(): Promise<any> {
   const [dashboard, cashflow, payables, banks, dre, costs, alerts, hrCosts, costAnalysis] = await Promise.all([
     getDashboard().catch(() => null),
     getCashFlow().catch(() => null),
@@ -652,8 +652,8 @@ export async function buildFinancialSummary() {
     getCostAnalysis().catch(() => null),
   ]);
 
-  const kpis = dashboard?.kpis ?? {};
-  const topClients = (dashboard?.topClients ?? []).slice(0, 5).map((c) => ({
+  const kpis: any = dashboard?.kpis ?? {};
+  const topClients = (dashboard?.topClients ?? []).slice(0, 5).map((c: any) => ({
     nome: c.name, faturacao: c.salesAmount, divida: c.currentDebt,
   }));
 
@@ -663,13 +663,13 @@ export async function buildFinancialSummary() {
   };
 
   const pagamentos = {
-    aPagar: (payables ?? []).reduce((s, p) => s + Math.abs(Number(p.totalAmount ?? 0)), 0),
-    vencidos: (payables ?? []).filter((p) => p.status === "Vencido").length,
-    pendentes: (payables ?? []).filter((p) => p.status === "Pendente").length,
+    aPagar: (payables ?? []).reduce((s: number, p: any) => s + Math.abs(Number(p.totalAmount ?? 0)), 0),
+    vencidos: (payables ?? []).filter((p: any) => p.status === "Vencido").length,
+    pendentes: (payables ?? []).filter((p: any) => p.status === "Pendente").length,
   };
 
-  const fluxoCaixa = cashflow?.summary ?? {};
-  const saldoBancos = (banks?.accounts ?? []).map((b) => ({
+  const fluxoCaixa: any = cashflow?.summary ?? {};
+  const saldoBancos = (banks?.accounts ?? []).map((b: any) => ({
     conta: b.Conta, banco: b.descBanco || b.banco, moeda: b.Moeda,
   }));
 
@@ -680,7 +680,7 @@ export async function buildFinancialSummary() {
   } : null;
 
   const producao = costs?.summary ?? null;
-  const alertasCriticos = (alerts?.alerts ?? []).filter((a) => a.severity === "high").slice(0, 5).map((a) => ({
+  const alertasCriticos = (alerts?.alerts ?? []).filter((a: any) => a.severity === "high").slice(0, 5).map((a: any) => ({
     tipo: a.type, titulo: a.title, mensagem: a.message,
   }));
 
@@ -706,14 +706,20 @@ export async function buildFinancialSummary() {
   };
 }
 
-export async function getTopProducts({ limit = 20, metric = "margin", order = "DESC" } = {}) {
-  const safeLimit = Math.max(1, Math.min(100, parseInt(limit) || 20));
-  const safeOrder = String(order).toUpperCase() === "ASC" ? "ASC" : "DESC";
-  const metricColumn = {
-    revenue: "revenue", cogs: "cogs", margin: "margin", marginPct: "marginPct", quantity: "quantity",
-  }[String(metric)] || "margin";
+export interface TopProductsParams {
+  limit?: number | string | null;
+  metric?: string | null;
+  order?: string | null;
+}
 
-  const products = all(`
+export async function getTopProducts({ limit = 20, metric = "margin", order = "DESC" }: TopProductsParams = {}): Promise<any> {
+  const safeLimit = Math.max(1, Math.min(100, parseInt(String(limit)) || 20));
+  const safeOrder = String(order).toUpperCase() === "ASC" ? "ASC" : "DESC";
+  const metricColumn = ({
+    revenue: "revenue", cogs: "cogs", margin: "margin", marginPct: "marginPct", quantity: "quantity",
+  } as Record<string, string>)[String(metric)] || "margin";
+
+  const products = all<any>(`
     WITH Vendas AS (
       SELECT l.Artigo,
         SUM(COALESCE(l.Quantidade, 0)) AS quantity,
@@ -756,8 +762,8 @@ export async function getTopProducts({ limit = 20, metric = "margin", order = "D
   };
 }
 
-export async function getProfitability() {
-  return all(`
+export async function getProfitability(): Promise<any[]> {
+  return all<any>(`
     SELECT l.Artigo, a.Descricao, COUNT(*) AS docs, ROUND(SUM(l.Quantidade),2) AS qty,
       ROUND(SUM(l.TotalIliquido),2) AS revenue, ROUND(SUM(l.PrecoLiquido),2) AS cogs,
       ROUND(SUM(l.TotalIliquido - l.PrecoLiquido),2) AS margin
@@ -768,7 +774,7 @@ export async function getProfitability() {
   `);
 }
 
-export async function getBreakeven() {
+export async function getBreakeven(): Promise<any> {
   const dre = await getDRE();
   const margem = dre.vendasLiquidas - dre.custoMercadoriasVendidas;
   const margemPct = dre.vendasLiquidas > 0 ? (margem / dre.vendasLiquidas) * 100 : 0;
@@ -778,21 +784,21 @@ export async function getBreakeven() {
   return { breakeven: Number(breakeven.toFixed(2)), beUnidades, margemPct: Number(margemPct.toFixed(2)), custosFixos: custos };
 }
 
-export async function getComparePeriods(meses = "6") {
+export async function getComparePeriods(meses: string = "6"): Promise<any[]> {
   const n = parseInt(meses) || 6;
   const now = new Date();
-  const periods = [];
+  const periods: any[] = [];
   for (let i = n - 1; i >= 0; i--) {
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
     const mes = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-    const vendas = get(`SELECT COALESCE(SUM(TotalMerc),0) AS v FROM CabecDoc WHERE TipoEntidade='C' AND strftime('%Y-%m',Data)=?`, [mes]).v;
-    const compras = get(`SELECT COALESCE(SUM(TotalMerc),0) AS v FROM CabecCompras WHERE strftime('%Y-%m',DataDoc)=?`, [mes]).v;
+    const vendas = get<any>(`SELECT COALESCE(SUM(TotalMerc),0) AS v FROM CabecDoc WHERE TipoEntidade='C' AND strftime('%Y-%m',Data)=?`, [mes])?.v;
+    const compras = get<any>(`SELECT COALESCE(SUM(TotalMerc),0) AS v FROM CabecCompras WHERE strftime('%Y-%m',DataDoc)=?`, [mes])?.v;
     periods.push({ mes, vendas: Number(Number(vendas).toFixed(2)), compras: Number(Number(compras).toFixed(2)) });
   }
   return periods;
 }
 
-export async function getBudgetVsActual() {
+export async function getBudgetVsActual(): Promise<any> {
   const dre = await getDRE();
   const orcamento = { vendasOrc: dre.vendasLiquidas * 1.05, custosOrc: dre.custoTotal * 0.95 };
   const desvios = {
@@ -802,8 +808,8 @@ export async function getBudgetVsActual() {
   return { real: { vendasLiquidas: dre.vendasLiquidas, custoTotal: dre.custoTotal }, orcamento, desvios };
 }
 
-export async function getCollections() {
-  return all(`
+export async function getCollections(): Promise<any[]> {
+  return all<any>(`
     SELECT c.Cliente, c.Nome, COUNT(d.Id) AS docs,
       ROUND(SUM(COALESCE(NULLIF(d.TotalDocumento,0), d.TotalMerc+d.TotalIva-d.TotalDesc)),2) AS total,
       CAST(julianday(?) - julianday(MAX(d.DataVencimento)) AS INTEGER) AS diasAtraso
@@ -814,12 +820,12 @@ export async function getCollections() {
   `, [today(), today()]);
 }
 
-export async function getCrm() {
-  return all(`SELECT * FROM Contactos LIMIT 50`);
+export async function getCrm(): Promise<any[]> {
+  return all<any>(`SELECT * FROM Contactos LIMIT 50`);
 }
 
-export async function getInventoryDetail() {
-  return all(`
+export async function getInventoryDetail(): Promise<any[]> {
+  return all<any>(`
     SELECT i.Artigo, a.Descricao, i.Stock, i.EstadoStock, i.DataStock,
       ROUND(i.Stock * COALESCE(c.CustoGrpCstMBase,0), 2) AS valor
     FROM INV_ValoresActuaisStock i
@@ -829,8 +835,8 @@ export async function getInventoryDetail() {
   `);
 }
 
-export async function getVendorsAnalysis() {
-  return all(`
+export async function getVendorsAnalysis(): Promise<any[]> {
+  return all<any>(`
     SELECT f.Fornecedor, f.Nome, COUNT(c.Id) AS docCount,
       ROUND(COALESCE(SUM(COALESCE(NULLIF(c.TotalDocumento,0), c.TotalMerc+c.TotalIva-c.TotalDesc)),0),2) AS totalCompras,
       ROUND(AVG(julianday(c.DataVencimento) - julianday(c.DataDoc))) AS prazoMedio
@@ -840,8 +846,8 @@ export async function getVendorsAnalysis() {
   `);
 }
 
-export async function getProductsDetail() {
-  return all(`
+export async function getProductsDetail(): Promise<any[]> {
+  return all<any>(`
     SELECT a.Artigo, a.Descricao, a.UnidadeVenda,
       ROUND(COALESCE(a.PCMedio,0),2) AS precoCusto, ROUND(COALESCE(a.PCUltimo,0),2) AS precoVenda,
       COALESCE(a.Familia,'') AS familia,
@@ -850,8 +856,8 @@ export async function getProductsDetail() {
   `);
 }
 
-export async function getHRMonthly() {
-  return all(`
+export async function getHRMonthly(): Promise<any[]> {
+  return all<any>(`
     SELECT Mes,
       ('0' || printf('%02d', Mes) || '/2026') AS mesFormatado,
       SUM(CASE WHEN Conta='6421' THEN Valor ELSE 0 END) AS salarios,
@@ -866,18 +872,18 @@ export async function getHRMonthly() {
 
 const mockHR = {
   summary: { totalFuncionarios: 10, ativosAgora: 9, recibosProcessados: 59, custoAnualEstimado: 90600 },
-  funcionarios: [],
-  recibos: [],
+  funcionarios: [] as any[],
+  recibos: [] as any[],
 };
 
-export async function getHR() {
+export async function getHR(): Promise<any> {
   try {
-    const funcionarios = all(`
+    const funcionarios = all<any>(`
       SELECT Codigo, Nome, Categoria, Situacao, DataAdmissao, DataFimContrato,
         ROUND(COALESCE(Vencimento,0),2) AS vencimento, TipoContrato, Qualificacao
       FROM Funcionarios ORDER BY DataAdmissao
     `);
-    const recibos = all(`
+    const recibos = all<any>(`
       SELECT f.Codigo, f.Nome, COUNT(r.Id) AS recibosProcessados,
         ROUND(COALESCE(SUM(p.TotalDeRemuneracoes),0),2) AS totalRemuneracoes,
         ROUND(COALESCE(SUM(p.TotalDeDescontos),0),2) AS totalDescontos,
@@ -887,14 +893,14 @@ export async function getHR() {
       LEFT JOIN FuncRecibosProcs p ON p.ReciboID=r.Id
       GROUP BY f.Codigo, f.Nome ORDER BY f.Nome
     `);
-    const ferias = all(`
+    const ferias = all<any>(`
       SELECT f.Codigo, f.Nome,
         COALESCE(SUM(julianday(fe.DataFim) - julianday(fe.DataInicio)),0) AS diasFerias,
         COUNT(*) AS periodos
       FROM RHP_Ferias fe LEFT JOIN Funcionarios f ON f.Codigo=fe.CodFunc
       GROUP BY f.Codigo, f.Nome
     `);
-    const historico = all(`
+    const historico = all<any>(`
       SELECT f.Codigo, f.Nome, COUNT(*) AS registos, MAX(h.DataFim) AS ultimaAlteracao
       FROM RHP_HistoricoRegistoVinculo h LEFT JOIN Funcionarios f ON f.Codigo=h.CodFunc
       GROUP BY f.Codigo, f.Nome
