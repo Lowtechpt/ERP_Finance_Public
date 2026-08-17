@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiUrl } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { MetricCard } from "@/components/metrics";
@@ -38,7 +39,7 @@ export function AiWorkspace({
 
     Promise.allSettled(
       endpoints.map(([key, path]) =>
-        fetch(path)
+        fetch(apiUrl(path))
           .then((response) => {
             if (!response.ok) throw new Error(`${path} respondeu ${response.status}`);
             return response.json();

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Settings, XIcon, Send } from "lucide-react";
+import { apiUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,7 +68,7 @@ export function GeminiChatPanel({
   }
 
   async function fetchContextPart(path: string) {
-    const response = await fetch(path);
+    const response = await fetch(apiUrl(path));
     if (!response.ok) {
       throw new Error(`${path} respondeu ${response.status}`);
     }
